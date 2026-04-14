@@ -93,9 +93,9 @@ defmodule Wagger.Generator.Cloudflare do
     inner =
       routes
       |> Enum.map(&build_path_expression/1)
-      |> Enum.join(" or ")
+      |> Enum.join("\n  or ")
 
-    "not (#{inner})"
+    "not (\n  #{inner}\n)"
   end
 
   defp build_path_expression(%{path: path, path_type: "prefix"}) do
