@@ -1,0 +1,156 @@
+<div class="space-y-6">
+  <%!-- Header --%>
+  <div class="flex items-start justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-base-content"><%= @app.name %></h1>
+      <%= if @app.description do %>
+        <p class="text-sm text-[color:var(--tn-text-muted)] mt-1"><%= @app.description %></p>
+      <% end %>
+    </div>
+    <div class="text-right text-sm text-[color:var(--tn-text-muted)]">
+      <span class="font-semibold text-base-content"><%= length(@routes) %></span> routes
+    </div>
+  </div>
+
+  <%!-- Route table --%>
+  <div class="bg-base-200 rounded-lg border border-neutral overflow-hidden">
+    <div class="px-4 py-2 border-b border-neutral bg-base-300">
+      <span class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)]">
+        Routes
+      </span>
+    </div>
+
+    <%= for {group_key, rows} <- @grouped_routes do %>
+      <%!-- Group header --%>
+      <div class="px-4 py-1.5 bg-base-300 border-b border-neutral">
+        <span class="text-xs font-mono text-[color:var(--tn-text-muted)] font-semibold">
+          <%= group_key %>
+        </span>
+      </div>
+
+      <%!-- Endpoint rows --%>
+      <%= for row <- rows do %>
+        <div class="flex items-center gap-3 px-4 py-2 border-b border-neutral last:border-b-0 hover:bg-base-300 transition-colors">
+          <%!-- Method pill --%>
+          <div class="flex-shrink-0 w-16">
+            <WaggerWeb.WaggerComponents.method_pill method={row.method} />
+          </div>
+
+          <%!-- Path with param highlighting --%>
+          <div class="flex-1 font-mono text-sm">
+            <%= for {type, segment} <- row.path_parts do %>
+              <%= if type == "param" do %>
+                <span class="text-secondary font-semibold"><%= segment %></span>
+              <% else %>
+                <span class="text-base-content"><%= segment %></span>
+              <% end %>
+            <% end %>
+          </div>
+
+          <%!-- Rate limit pill --%>
+          <%= if row.rate_limit do %>
+            <span class="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-base-300 border border-neutral text-[color:var(--tn-text-muted)]">
+              <%= row.rate_limit %>/min
+            </span>
+          <% end %>
+
+          <%!-- Description --%>
+          <%= if row.description do %>
+            <span class="flex-shrink-0 text-xs text-[color:var(--tn-text-muted)] text-right max-w-[200px] truncate">
+              <%= row.description %>
+            </span>
+          <% end %>
+        </div>
+      <% end %>
+    <% end %>
+
+    <%= if @grouped_routes == [] do %>
+      <div class="px-4 py-8 text-center text-sm text-[color:var(--tn-text-muted)]">
+        No routes defined yet.
+      </div>
+    <% end %>
+  </div>
+
+  <%!-- Provider config sections --%>
+  <% configured = Enum.filter(~w(nginx aws cloudflare azure gcp caddy), fn provider ->
+    drift = Map.get(@drifts, provider)
+    drift && drift.status != :never_generated
+  end) %>
+
+  <%= if configured != [] do %>
+    <div class="space-y-2">
+      <div class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)] mb-2">
+        Provider Configs
+      </div>
+
+      <%= for provider <- configured do %>
+        <% drift = Map.get(@drifts, provider) %>
+        <% expanded = MapSet.member?(@expanded_providers, provider) %>
+        <div class={[
+          "rounded-lg border overflow-hidden",
+          drift.status == :drifted && "border-warning",
+          drift.status == :current && "border-neutral"
+        ]}>
+          <%!-- Provider header / toggle --%>
+          <button
+            class="w-full flex items-center justify-between px-4 py-2.5 bg-base-300 hover:bg-base-200 transition-colors cursor-pointer"
+            phx-click="toggle_provider"
+            phx-value-provider={provider}
+          >
+            <div class="flex items-center gap-2">
+              <WaggerWeb.WaggerComponents.provider_badge
+                provider={provider}
+                status={drift.status}
+                summary={drift_summary(drift)}
+              />
+            </div>
+            <span class="text-xs text-[color:var(--tn-text-muted)]">
+              <%= if expanded, do: "▲", else: "▼" %>
+            </span>
+          </button>
+
+          <%!-- Expanded body --%>
+          <%= if expanded do %>
+            <div class="px-4 py-3 bg-base-200 border-t border-neutral">
+              <%= if drift.status == :drifted do %>
+                <div class="mb-2 text-xs text-[color:var(--tn-text-muted)] font-semibold uppercase tracking-wide">
+                  Changes since last generation
+                </div>
+                <WaggerWeb.WaggerComponents.drift_diff changes={drift.changes} />
+              <% else %>
+                <p class="text-xs text-success">Config is current with live routes.</p>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%!-- Import section --%>
+  <div class="rounded-lg border border-neutral overflow-hidden">
+    <button
+      class="w-full flex items-center justify-between px-4 py-3 bg-base-300 hover:bg-base-200 transition-colors cursor-pointer text-left"
+      phx-click="toggle_import"
+    >
+      <span class="text-sm text-[color:var(--tn-text-muted)]">
+        Import routes...
+      </span>
+      <span class="text-xs text-[color:var(--tn-text-muted)]">
+        <%= if @show_import, do: "▲", else: "▼" %>
+      </span>
+    </button>
+
+    <%= if @show_import do %>
+      <div class="px-4 py-3 bg-base-200 border-t border-neutral">
+        <p class="text-xs text-[color:var(--tn-text-muted)] mb-2">
+          Paste route definitions below. Full import functionality is processed via the API.
+        </p>
+        <textarea
+          class="textarea textarea-bordered w-full font-mono text-xs h-32 bg-base-300"
+          placeholder="Paste routes here..."
+        ></textarea>
+      </div>
+    <% end %>
+  </div>
+</div>
