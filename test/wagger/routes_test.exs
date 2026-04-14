@@ -109,7 +109,12 @@ defmodule Wagger.RoutesTest do
 
     test "filters by tag", %{app: app} do
       {:ok, _} = Routes.create_route(app, @valid_attrs)
-      {:ok, _} = Routes.create_route(app, Map.merge(@valid_attrs, %{"path" => "/private", "tags" => ["internal"]}))
+
+      {:ok, _} =
+        Routes.create_route(
+          app,
+          Map.merge(@valid_attrs, %{"path" => "/private", "tags" => ["internal"]})
+        )
 
       result = Routes.list_routes(app, %{"tag" => "public"})
       assert length(result) == 1
@@ -118,7 +123,12 @@ defmodule Wagger.RoutesTest do
 
     test "filters by method", %{app: app} do
       {:ok, _} = Routes.create_route(app, @valid_attrs)
-      {:ok, _} = Routes.create_route(app, Map.merge(@valid_attrs, %{"path" => "/posts", "methods" => ["DELETE"]}))
+
+      {:ok, _} =
+        Routes.create_route(
+          app,
+          Map.merge(@valid_attrs, %{"path" => "/posts", "methods" => ["DELETE"]})
+        )
 
       result = Routes.list_routes(app, %{"method" => "DELETE"})
       assert length(result) == 1
@@ -127,7 +137,12 @@ defmodule Wagger.RoutesTest do
 
     test "filters by path_type", %{app: app} do
       {:ok, _} = Routes.create_route(app, @valid_attrs)
-      {:ok, _} = Routes.create_route(app, Map.merge(@valid_attrs, %{"path" => "/v1/*", "path_type" => "prefix"}))
+
+      {:ok, _} =
+        Routes.create_route(
+          app,
+          Map.merge(@valid_attrs, %{"path" => "/v1/*", "path_type" => "prefix"})
+        )
 
       result = Routes.list_routes(app, %{"path_type" => "prefix"})
       assert length(result) == 1

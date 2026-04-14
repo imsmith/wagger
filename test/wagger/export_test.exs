@@ -9,7 +9,9 @@ defmodule Wagger.ExportTest do
 
   describe "to_edn/1" do
     setup do
-      {:ok, app} = Applications.create_application(%{"name" => "export-test-app", "tags" => ["api"]})
+      {:ok, app} =
+        Applications.create_application(%{"name" => "export-test-app", "tags" => ["api"]})
+
       {:ok, app: app}
     end
 

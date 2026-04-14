@@ -45,7 +45,16 @@ defmodule Wagger.Applications.Route do
   """
   def changeset(route, attrs) do
     route
-    |> cast(attrs, [:path, :methods, :path_type, :description, :query_params, :headers, :rate_limit, :tags])
+    |> cast(attrs, [
+      :path,
+      :methods,
+      :path_type,
+      :description,
+      :query_params,
+      :headers,
+      :rate_limit,
+      :tags
+    ])
     |> validate_required([:path, :path_type])
     |> validate_inclusion(:path_type, @valid_path_types)
     |> put_default_methods()

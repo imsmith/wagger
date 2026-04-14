@@ -29,7 +29,9 @@ defmodule WaggerWeb.ApplicationControllerTest do
 
     test "filters by tag", %{conn: conn} do
       {:ok, _app1} = Applications.create_application(%{"name" => "tagged-app", "tags" => ["api"]})
-      {:ok, _app2} = Applications.create_application(%{"name" => "other-app", "tags" => ["internal"]})
+
+      {:ok, _app2} =
+        Applications.create_application(%{"name" => "other-app", "tags" => ["internal"]})
 
       conn = get(conn, ~p"/api/applications?tag=api")
       response = json_response(conn, 200)

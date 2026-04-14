@@ -38,7 +38,9 @@ defmodule Wagger.Applications.Application do
     application
     |> cast(attrs, [:name, :description, :tags])
     |> validate_required([:name])
-    |> validate_format(:name, ~r/^[a-z0-9][a-z0-9\-]*$/, message: "must be a lowercase slug (letters, digits, hyphens)")
+    |> validate_format(:name, ~r/^[a-z0-9][a-z0-9\-]*$/,
+      message: "must be a lowercase slug (letters, digits, hyphens)"
+    )
     |> unique_constraint(:name)
   end
 end

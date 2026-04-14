@@ -38,7 +38,9 @@ defmodule Wagger.Accounts.User do
     user
     |> cast(attrs, [:username, :display_name, :password_hash, :api_key_hash])
     |> validate_required([:username])
-    |> validate_format(:username, ~r/^[a-z0-9][a-z0-9\-]*$/, message: "must be a lowercase slug (letters, digits, hyphens)")
+    |> validate_format(:username, ~r/^[a-z0-9][a-z0-9\-]*$/,
+      message: "must be a lowercase slug (letters, digits, hyphens)"
+    )
     |> unique_constraint(:username)
     |> unique_constraint(:api_key_hash)
   end

@@ -36,8 +36,17 @@ defmodule WaggerWeb.RouteControllerTest do
     end
 
     test "filters by tag", %{conn: conn, app: app} do
-      {:ok, _r1} = Routes.create_route(app, Map.merge(@valid_attrs, %{"tags" => ["public"], "path" => "/public"}))
-      {:ok, _r2} = Routes.create_route(app, Map.merge(@valid_attrs, %{"tags" => ["internal"], "path" => "/internal"}))
+      {:ok, _r1} =
+        Routes.create_route(
+          app,
+          Map.merge(@valid_attrs, %{"tags" => ["public"], "path" => "/public"})
+        )
+
+      {:ok, _r2} =
+        Routes.create_route(
+          app,
+          Map.merge(@valid_attrs, %{"tags" => ["internal"], "path" => "/internal"})
+        )
 
       conn = get(conn, ~p"/api/applications/#{app.id}/routes?tag=public")
       response = json_response(conn, 200)
@@ -75,7 +84,10 @@ defmodule WaggerWeb.RouteControllerTest do
   describe "update" do
     test "updates route with valid data", %{conn: conn, app: app} do
       {:ok, route} = Routes.create_route(app, @valid_attrs)
-      conn = put(conn, ~p"/api/applications/#{app.id}/routes/#{route.id}", %{"path" => "/api/v2/users"})
+
+      conn =
+        put(conn, ~p"/api/applications/#{app.id}/routes/#{route.id}", %{"path" => "/api/v2/users"})
+
       assert %{"data" => %{"path" => "/api/v2/users"}} = json_response(conn, 200)
     end
   end

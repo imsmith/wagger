@@ -19,7 +19,10 @@ defmodule WaggerWeb.Plugs.AuthenticateTest do
     %{user: user, api_key: api_key}
   end
 
-  test "authenticates valid Bearer token and assigns current_user", %{user: user, api_key: api_key} do
+  test "authenticates valid Bearer token and assigns current_user", %{
+    user: user,
+    api_key: api_key
+  } do
     conn =
       conn(:get, "/api/applications")
       |> put_req_header("authorization", "Bearer #{api_key}")

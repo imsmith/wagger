@@ -1,0 +1,101 @@
+<h2>Dashboard — Progressive Disclosure</h2>
+<p class="subtitle">Summary bar answers "how bad is it?" — click a status to see the apps in that state. Most urgent first.</p>
+
+<div class="mockup" style="margin-top: 16px;">
+  <div class="mockup-header">Default view — nothing selected</div>
+  <div class="mockup-body" style="padding: 16px; font-family: monospace; font-size: 13px;">
+    <div class="mock-nav" style="margin-bottom: 20px;">Wagger &nbsp;|&nbsp; Dashboard &nbsp;|&nbsp; Users</div>
+
+    <div style="display: flex; gap: 16px; margin-bottom: 20px;">
+      <div style="flex: 1; background: #2e2a1a; border: 2px solid #eab308; border-radius: 8px; padding: 16px; text-align: center; cursor: pointer;">
+        <div style="font-size: 32px; font-weight: bold; color: #eab308;">3</div>
+        <div style="font-size: 12px; opacity: 0.7;">drifted</div>
+      </div>
+      <div style="flex: 1; background: #1a2e1a; border: 1px solid #22c55e; border-radius: 8px; padding: 16px; text-align: center; cursor: pointer;">
+        <div style="font-size: 32px; font-weight: bold; color: #22c55e;">7</div>
+        <div style="font-size: 12px; opacity: 0.7;">current</div>
+      </div>
+      <div style="flex: 1; background: #1a1a2e; border: 1px solid #555; border-radius: 8px; padding: 16px; text-align: center; cursor: pointer;">
+        <div style="font-size: 32px; font-weight: bold; color: #999;">8</div>
+        <div style="font-size: 12px; opacity: 0.7;">never generated</div>
+      </div>
+    </div>
+
+    <div style="text-align: center; opacity: 0.4; padding: 40px 0; font-size: 13px;">
+      Click a status above to see affected applications
+    </div>
+  </div>
+</div>
+
+<div class="mockup" style="margin-top: 24px;">
+  <div class="mockup-header">After clicking "3 drifted" — cards expand below</div>
+  <div class="mockup-body" style="padding: 16px; font-family: monospace; font-size: 13px;">
+    <div class="mock-nav" style="margin-bottom: 20px;">Wagger &nbsp;|&nbsp; Dashboard &nbsp;|&nbsp; Users</div>
+
+    <div style="display: flex; gap: 16px; margin-bottom: 20px;">
+      <div style="flex: 1; background: #2e2a1a; border: 2px solid #eab308; border-radius: 8px; padding: 16px; text-align: center; cursor: pointer; box-shadow: 0 0 12px rgba(234,179,8,0.3);">
+        <div style="font-size: 32px; font-weight: bold; color: #eab308;">3</div>
+        <div style="font-size: 12px; opacity: 0.7;">drifted</div>
+        <div style="font-size: 10px; color: #eab308; margin-top: 4px;">&#x25BC; showing</div>
+      </div>
+      <div style="flex: 1; background: #1a2e1a; border: 1px solid #22c55e; border-radius: 8px; padding: 16px; text-align: center; cursor: pointer; opacity: 0.5;">
+        <div style="font-size: 32px; font-weight: bold; color: #22c55e;">7</div>
+        <div style="font-size: 12px; opacity: 0.7;">current</div>
+      </div>
+      <div style="flex: 1; background: #1a1a2e; border: 1px solid #555; border-radius: 8px; padding: 16px; text-align: center; cursor: pointer; opacity: 0.5;">
+        <div style="font-size: 32px; font-weight: bold; color: #999;">8</div>
+        <div style="font-size: 12px; opacity: 0.7;">never generated</div>
+      </div>
+    </div>
+
+    <!-- App cards for drifted status, worst first -->
+    <div style="border: 1px solid #ef4444; border-left: 4px solid #ef4444; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <span style="font-weight: bold; font-size: 15px;">auth-service</span>
+          <span style="opacity: 0.5; margin-left: 8px;">8 routes</span>
+          <span style="background: #334; padding: 2px 6px; border-radius: 3px; margin-left: 8px; font-size: 11px;">internal</span>
+        </div>
+        <div style="font-size: 11px; opacity: 0.5;">3 providers drifted</div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+        <span style="background: #ef4444; color: #fff; padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;">nginx: 3 routes removed</span>
+        <span style="background: #ef4444; color: #fff; padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;">aws: 3 routes removed</span>
+        <span style="background: #ef4444; color: #fff; padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;">cloudflare: 3 routes removed</span>
+      </div>
+    </div>
+
+    <div style="border: 1px solid #eab308; border-left: 4px solid #eab308; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <span style="font-weight: bold; font-size: 15px;">my-api</span>
+          <span style="opacity: 0.5; margin-left: 8px;">12 routes</span>
+          <span style="background: #334; padding: 2px 6px; border-radius: 3px; margin-left: 8px; font-size: 11px;">api</span>
+        </div>
+        <div style="font-size: 11px; opacity: 0.5;">1 provider drifted</div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+        <span style="background: #eab308; color: #000; padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;">aws: 2 routes added</span>
+        <span style="background: #22c55e; color: #000; padding: 3px 10px; border-radius: 4px; font-size: 12px; opacity: 0.6;">nginx: current</span>
+        <span style="background: #22c55e; color: #000; padding: 3px 10px; border-radius: 4px; font-size: 12px; opacity: 0.6;">cloudflare: current</span>
+        <span style="background: #22c55e; color: #000; padding: 3px 10px; border-radius: 4px; font-size: 12px; opacity: 0.6;">caddy: current</span>
+      </div>
+    </div>
+
+    <div style="border: 1px solid #eab308; border-left: 4px solid #eab308; border-radius: 8px; padding: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <span style="font-weight: bold; font-size: 15px;">static-site</span>
+          <span style="opacity: 0.5; margin-left: 8px;">3 routes</span>
+        </div>
+        <div style="font-size: 11px; opacity: 0.5;">1 provider drifted</div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+        <span style="background: #eab308; color: #000; padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;">nginx: 1 route added</span>
+        <span style="background: #22c55e; color: #000; padding: 3px 10px; border-radius: 4px; font-size: 12px; opacity: 0.6;">cloudflare: current</span>
+      </div>
+    </div>
+
+    <p style="margin-top: 12px; opacity: 0.4; font-size: 11px;">Click app name → app detail. Click provider badge → config view for that provider.</p>
+  </div>
+</div>

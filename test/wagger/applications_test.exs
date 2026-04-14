@@ -10,8 +10,16 @@ defmodule Wagger.ApplicationsTest do
   alias Wagger.Applications
   alias Wagger.Applications.Application
 
-  @valid_attrs %{"name" => "my-app", "description" => "A test application", "tags" => ["api", "public"]}
-  @update_attrs %{"name" => "my-app-v2", "description" => "Updated description", "tags" => ["internal"]}
+  @valid_attrs %{
+    "name" => "my-app",
+    "description" => "A test application",
+    "tags" => ["api", "public"]
+  }
+  @update_attrs %{
+    "name" => "my-app-v2",
+    "description" => "Updated description",
+    "tags" => ["internal"]
+  }
   @invalid_attrs %{"name" => nil}
 
   describe "create_application/1" do
@@ -54,8 +62,11 @@ defmodule Wagger.ApplicationsTest do
     end
 
     test "filters by tag" do
-      {:ok, _} = Applications.create_application(%{"name" => "app-api", "tags" => ["api", "public"]})
-      {:ok, _} = Applications.create_application(%{"name" => "app-private", "tags" => ["internal"]})
+      {:ok, _} =
+        Applications.create_application(%{"name" => "app-api", "tags" => ["api", "public"]})
+
+      {:ok, _} =
+        Applications.create_application(%{"name" => "app-private", "tags" => ["internal"]})
 
       result = Applications.list_applications(%{"tag" => "api"})
       assert length(result) == 1

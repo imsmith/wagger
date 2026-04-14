@@ -1,0 +1,68 @@
+module wagger-caddy {
+  namespace "urn:wagger:caddy";
+  prefix wc;
+
+  organization "Wagger Project";
+  description "Data model for Caddy WAF-style allowlist configuration.";
+
+  revision 2026-04-13 {
+    description "Initial revision.";
+  }
+
+  container caddy-config {
+    description "Top-level Caddy WAF configuration.";
+
+    leaf config-name {
+      type string;
+      mandatory true;
+      description "Name prefix for generated config elements.";
+    }
+
+    leaf upstream {
+      type string;
+      mandatory true;
+      description "Default reverse proxy upstream address.";
+    }
+
+    list matchers {
+      key "name";
+      description "Named matcher blocks (@name) for path and method matching.";
+
+      leaf name {
+        type string;
+        mandatory true;
+        description "Matcher name, used as @name in the Caddyfile.";
+      }
+
+      leaf match-type {
+        type enumeration {
+          enum "path";
+          enum "path_regexp";
+        }
+        mandatory true;
+        description "Caddy matcher directive: path for exact/prefix, path_regexp for regex.";
+      }
+
+      leaf pattern {
+        type string;
+        mandatory true;
+        description "The path or regexp pattern to match.";
+      }
+
+      leaf-list allowed-methods {
+        type string;
+        description "HTTP methods allowed for this matcher.";
+      }
+
+      container rate-limit {
+        description "Optional rate limiting configuration for this route.";
+
+        leaf per-minute {
+          type uint32;
+          mandatory true;
+          description "Maximum requests per minute.";
+        }
+      }
+    }
+  }
+}
