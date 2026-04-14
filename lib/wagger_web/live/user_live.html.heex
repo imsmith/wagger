@@ -76,14 +76,16 @@
               <%= String.slice(user.inserted_at, 0, 10) %>
             </td>
             <td class="text-right">
-              <button
-                phx-click="delete_user"
-                phx-value-id={user.id}
-                data-confirm={"Delete user #{user.username}? This cannot be undone."}
-                class="btn btn-xs btn-error btn-outline"
-              >
-                delete
-              </button>
+              <%= if user.username != "admin" do %>
+                <button
+                  phx-click="delete_user"
+                  phx-value-id={user.id}
+                  data-confirm={"Delete user #{user.username}? This cannot be undone."}
+                  class="btn btn-xs btn-error btn-outline"
+                >
+                  delete
+                </button>
+              <% end %>
             </td>
           </tr>
         <% end %>
