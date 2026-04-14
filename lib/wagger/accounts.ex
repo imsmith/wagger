@@ -22,7 +22,9 @@ defmodule Wagger.Accounts do
     api_key = generate_api_key()
     api_key_hash = hash_api_key(api_key)
 
-    attrs_with_hash = Map.put(attrs, "api_key_hash", api_key_hash)
+    # Normalize key type to match whatever the caller used (atom or string)
+    key = if Map.keys(attrs) |> List.first() |> is_atom(), do: :api_key_hash, else: "api_key_hash"
+    attrs_with_hash = Map.put(attrs, key, api_key_hash)
 
     case %User{} |> User.changeset(attrs_with_hash) |> Repo.insert() do
       {:ok, user} -> {:ok, user, api_key}
