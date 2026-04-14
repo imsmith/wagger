@@ -1,9 +1,98 @@
 <%!-- Dashboard: WAF config drift status across all app-provider pairs --%>
 
 <div class="space-y-6">
+  <%!-- New Application --%>
+  <section>
+    <div class="flex items-center justify-between mb-3">
+      <h1 class="text-lg font-semibold text-base-content">WAF Config Status</h1>
+      <button
+        phx-click="toggle_new_app"
+        class={"text-sm px-3 py-1 rounded cursor-pointer transition-colors #{if @show_new_app, do: "bg-base-300 text-[color:var(--tn-text-muted)]", else: "bg-primary text-primary-content font-semibold hover:opacity-90"}"}
+      >
+        <%= if @show_new_app, do: "Cancel", else: "+ New Application" %>
+      </button>
+    </div>
+
+    <%= if @show_new_app do %>
+      <div class="bg-base-300 rounded-lg border border-neutral p-4 mb-4 space-y-3">
+        <%!-- Import mode tabs --%>
+        <div class="flex gap-1">
+          <%= for {mode, label} <- [{"openapi", "OpenAPI Spec"}, {"bulk", "Bulk Text"}, {"accesslog", "Access Log"}] do %>
+            <button
+              phx-click="new_app_mode"
+              phx-value-mode={mode}
+              class={"text-xs px-3 py-1 rounded cursor-pointer #{if @new_app_import_mode == mode, do: "bg-primary text-primary-content font-semibold", else: "bg-base-200 text-[color:var(--tn-text-muted)] hover:text-base-content"}"}
+            >
+              <%= label %>
+            </button>
+          <% end %>
+        </div>
+
+        <%!-- Input area --%>
+        <form phx-submit="preview_new_app" class="space-y-3">
+          <input type="hidden" name="name" value={@new_app_name} />
+          <textarea
+            name="input"
+            class="w-full h-40 bg-base-100 border border-neutral rounded p-3 text-xs font-mono text-base-content focus:border-primary focus:outline-none"
+            placeholder={input_placeholder(@new_app_import_mode)}
+            phx-debounce="500"
+          ><%= @new_app_input %></textarea>
+          <button type="submit" class="text-xs bg-base-200 text-base-content px-3 py-1 rounded border border-neutral hover:border-primary cursor-pointer">
+            Preview
+          </button>
+        </form>
+
+        <%!-- Preview results --%>
+        <%= if @new_app_preview do %>
+          <div class="border-t border-neutral pt-3 space-y-3">
+            <%!-- App name --%>
+            <form phx-submit="create_new_app" class="space-y-3">
+              <div class="flex items-end gap-3">
+                <div>
+                  <label class="text-xs text-[color:var(--tn-text-muted)] block mb-1">Application Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    value={@new_app_name}
+                    required
+                    class="bg-base-100 border border-neutral rounded px-2 py-1.5 text-sm text-base-content font-mono focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <button type="submit" class="bg-primary text-primary-content px-4 py-1.5 rounded text-xs font-bold hover:opacity-90 cursor-pointer">
+                  Create with <%= length(@new_app_preview.parsed) %> routes
+                </button>
+              </div>
+            </form>
+
+            <%!-- Parsed routes preview --%>
+            <div class="text-xs space-y-0.5 max-h-48 overflow-y-auto">
+              <%= for route <- @new_app_preview.parsed do %>
+                <div class="flex items-center gap-2 py-0.5">
+                  <%= for m <- (route[:methods] || route.methods || ["GET"]) do %>
+                    <.method_pill method={m} />
+                  <% end %>
+                  <span class="font-mono text-base-content"><%= route[:path] || route.path %></span>
+                  <%= if desc = route[:description] || route.description do %>
+                    <span class="text-[color:var(--tn-text-muted)] ml-auto"><%= desc %></span>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+
+            <%!-- Skipped lines --%>
+            <%= if @new_app_preview.skipped != [] do %>
+              <div class="text-xs text-warning">
+                <%= length(@new_app_preview.skipped) %> lines skipped
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </section>
+
   <%!-- Status summary bar --%>
   <section>
-    <h1 class="text-lg font-semibold mb-3 text-[color:var(--tn-text-default)]">WAF Config Status</h1>
 
     <% counts = status_counts(@drift_data) %>
 

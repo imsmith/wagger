@@ -10,6 +10,7 @@ defmodule WaggerWeb.DashboardLive do
 
   alias Wagger.Applications
   alias Wagger.Drift
+  alias Wagger.Import
   alias Wagger.Routes
 
   @providers ~w(nginx aws cloudflare azure gcp caddy)
@@ -24,6 +25,11 @@ defmodule WaggerWeb.DashboardLive do
        apps: apps,
        drift_data: drift_data,
        status_filter: nil,
+       show_new_app: false,
+       new_app_name: "",
+       new_app_import_mode: "openapi",
+       new_app_input: "",
+       new_app_preview: nil,
        page_title: "Dashboard",
        active_nav: :dashboard
      )}
@@ -37,6 +43,81 @@ defmodule WaggerWeb.DashboardLive do
       if socket.assigns.status_filter == status, do: nil, else: status
 
     {:noreply, assign(socket, status_filter: new_filter)}
+  end
+
+  @impl true
+  def handle_event("toggle_new_app", _, socket) do
+    {:noreply, assign(socket, :show_new_app, !socket.assigns.show_new_app)}
+  end
+
+  @impl true
+  def handle_event("new_app_mode", %{"mode" => mode}, socket) do
+    {:noreply, assign(socket, new_app_import_mode: mode, new_app_input: "", new_app_preview: nil)}
+  end
+
+  @impl true
+  def handle_event("preview_new_app", %{"input" => input, "name" => name}, socket) do
+    mode = socket.assigns.new_app_import_mode
+
+    {parsed, skipped, suggested_name} =
+      case mode do
+        "openapi" ->
+          case Jason.decode(input) do
+            {:ok, spec} ->
+              {routes, errors} = Import.OpenApi.parse(spec)
+              title = get_in(spec, ["info", "title"]) || ""
+              suggested = title |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-") |> String.trim("-")
+              {routes, errors, suggested}
+            {:error, _} ->
+              {[], ["Invalid JSON"], ""}
+          end
+        "bulk" ->
+          {routes, skipped} = Import.Bulk.parse(input)
+          {routes, skipped, ""}
+        "accesslog" ->
+          {routes, skipped} = Import.AccessLog.parse(input)
+          {routes, skipped, ""}
+      end
+
+    app_name = if name == "" and suggested_name != "", do: suggested_name, else: name
+
+    {:noreply, assign(socket,
+      new_app_name: app_name,
+      new_app_input: input,
+      new_app_preview: %{parsed: parsed, skipped: skipped}
+    )}
+  end
+
+  @impl true
+  def handle_event("create_new_app", %{"name" => name}, socket) do
+    preview = socket.assigns.new_app_preview
+
+    if is_nil(preview) or name == "" do
+      {:noreply, put_flash(socket, :error, "Provide an app name and import data")}
+    else
+      case Applications.create_application(%{name: name}) do
+        {:ok, app} ->
+          for route_map <- preview.parsed do
+            attrs = Map.take(route_map, [:path, :methods, :path_type, :description, :query_params, :headers, :rate_limit, :tags])
+            Routes.create_route(app, attrs)
+          end
+
+          apps = Applications.list_applications()
+          drift_data = build_drift_data(apps)
+
+          {:noreply,
+            socket
+            |> assign(apps: apps, drift_data: drift_data,
+                      show_new_app: false, new_app_preview: nil,
+                      new_app_name: "", new_app_input: "")
+            |> put_flash(:info, "Created #{name} with #{length(preview.parsed)} routes")
+            |> push_navigate(to: ~p"/applications/#{app.id}")}
+
+        {:error, changeset} ->
+          msg = changeset.errors |> Enum.map(fn {k, {v, _}} -> "#{k} #{v}" end) |> Enum.join(", ")
+          {:noreply, put_flash(socket, :error, msg)}
+      end
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -136,6 +217,10 @@ defmodule WaggerWeb.DashboardLive do
   # ---------------------------------------------------------------------------
   # Private
   # ---------------------------------------------------------------------------
+
+  def input_placeholder("openapi"), do: "Paste OpenAPI 3.x JSON spec..."
+  def input_placeholder("bulk"), do: "GET /api/users\nGET,POST /api/items - Item CRUD\n/health"
+  def input_placeholder("accesslog"), do: "Paste nginx/apache/caddy access log lines..."
 
   defp build_drift_data(apps) do
     Map.new(apps, fn app ->
