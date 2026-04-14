@@ -81,11 +81,7 @@
           <button
             phx-click="toggle_provider"
             phx-value-provider={provider}
-            class={[
-              "text-xs px-2 py-0.5 rounded font-semibold cursor-pointer",
-              drift.status == :drifted && "bg-warning text-base-100",
-              drift.status != :drifted && "bg-base-300 text-success border border-success"
-            ]}
+            class="text-xs px-2 py-0.5 rounded text-[color:var(--tn-text-muted)] border border-neutral opacity-50 cursor-pointer hover:opacity-80 transition-opacity"
           >
             <%= String.capitalize(provider) %>
           </button>
@@ -93,7 +89,7 @@
           <button
             phx-click="quick_generate"
             phx-value-provider={provider}
-            class="text-xs px-2 py-0.5 rounded text-[color:var(--tn-text-muted)] border border-neutral opacity-40 hover:opacity-80 hover:border-primary hover:text-primary cursor-pointer transition-all"
+            class="text-xs px-2 py-0.5 rounded text-base-content border border-primary cursor-pointer hover:bg-primary hover:text-primary-content transition-colors"
           >
             + <%= String.capitalize(provider) %>
           </button>
