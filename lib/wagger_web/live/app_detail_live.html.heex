@@ -12,63 +12,164 @@
     </div>
   </div>
 
-  <%!-- Route table --%>
-  <div class="bg-base-200 rounded-lg border border-neutral overflow-hidden">
-    <div class="px-4 py-2 border-b border-neutral bg-base-300">
-      <span class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)]">
+  <%!-- Route treemap section --%>
+  <div>
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)]">
         Routes
-      </span>
+      </div>
+
+      <%!-- Search --%>
+      <form phx-change="search_routes" class="flex items-center">
+        <input
+          name="query"
+          type="text"
+          value={@search_query}
+          placeholder="Search routes..."
+          phx-debounce="200"
+          class="bg-base-200 border border-neutral rounded px-2 py-1 text-xs font-mono text-base-content focus:border-primary focus:outline-none w-64"
+        />
+      </form>
     </div>
 
-    <%= for {group_key, rows} <- @grouped_routes do %>
-      <%!-- Group header --%>
-      <div class="px-4 py-1.5 bg-base-300 border-b border-neutral">
-        <span class="text-xs font-mono text-[color:var(--tn-text-muted)] font-semibold">
-          <%= group_key %>
-        </span>
-      </div>
-
-      <%!-- Endpoint rows --%>
-      <%= for row <- rows do %>
-        <div class="flex items-center gap-3 px-4 py-2 border-b border-neutral last:border-b-0 hover:bg-base-300 transition-colors">
-          <%!-- Method pill --%>
-          <div class="flex-shrink-0 w-16">
-            <WaggerWeb.WaggerComponents.method_pill method={row.method} />
-          </div>
-
-          <%!-- Path with param highlighting --%>
-          <div class="flex-1 font-mono text-sm"><%= for {type, segment} <- row.path_parts do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= segment %></span><% else %><span class="text-base-content"><%= segment %></span><% end %><% end %></div>
-
-          <%!-- Rate limit pill --%>
-          <%= if row.rate_limit do %>
-            <span class="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-base-300 border border-neutral text-[color:var(--tn-text-muted)]">
-              <%= row.rate_limit %>/min
-            </span>
-          <% end %>
-
-          <%!-- Description --%>
-          <%= if row.description do %>
-            <span class="flex-shrink-0 text-xs text-[color:var(--tn-text-muted)] text-right max-w-[200px] truncate">
-              <%= row.description %>
-            </span>
+    <%!-- Search results --%>
+    <%= if @search_results do %>
+      <div class="bg-base-200 rounded-lg border border-neutral p-3 mb-4">
+        <div class="text-xs text-[color:var(--tn-text-muted)] mb-2">
+          <%= length(@search_results) %> results for "<%= @search_query %>"
+        </div>
+        <div class="space-y-0.5 max-h-80 overflow-y-auto">
+          <%= for row <- @search_results do %>
+            <div class="flex items-center gap-2.5 py-1 text-sm">
+              <.method_pill method={row.method} />
+              <span class="font-mono text-base-content"><%= for {type, segment} <- row.path_parts do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= segment %></span><% else %><%= segment %><% end %><% end %></span>
+              <%= if row.description do %>
+                <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto"><%= row.description %></span>
+              <% end %>
+              <%= if row.rate_limit do %>
+                <span class="text-[color:var(--tn-text-muted)] text-[10px] bg-base-300 px-1.5 py-0.5 rounded"><%= row.rate_limit %>/min</span>
+              <% end %>
+            </div>
           <% end %>
         </div>
-      <% end %>
-    <% end %>
-
-    <%= if @grouped_routes == [] do %>
-      <div class="px-4 py-8 text-center text-sm text-[color:var(--tn-text-muted)]">
-        No routes defined yet.
       </div>
+
+    <% else %>
+      <%!-- Breadcrumb navigation --%>
+      <% current = current_subtree(@route_tree, @treemap_path) %>
+
+      <%= if @treemap_path != [] do %>
+        <div class="flex items-center gap-1.5 mb-3 text-xs font-mono">
+          <button phx-click="treemap_back" phx-value-depth="0" class="text-primary hover:underline cursor-pointer">
+            /
+          </button>
+          <%= for {segment, idx} <- Enum.with_index(@treemap_path) do %>
+            <span class="text-[color:var(--tn-text-muted)]">/</span>
+            <%= if idx < length(@treemap_path) - 1 do %>
+              <button phx-click="treemap_back" phx-value-depth={idx + 1} class="text-primary hover:underline cursor-pointer">
+                <%= segment %>
+              </button>
+            <% else %>
+              <span class="text-base-content font-semibold"><%= segment %></span>
+            <% end %>
+          <% end %>
+          <span class="text-[color:var(--tn-text-muted)] ml-2">
+            (<%= current[:_count] || 0 %> endpoints)
+          </span>
+        </div>
+      <% end %>
+
+      <%!-- Treemap or leaf view --%>
+      <% children = tree_children(current) %>
+
+      <%= if children != [] do %>
+        <%!-- Treemap cells --%>
+        <div class="flex flex-wrap gap-1.5" style="min-height: 200px;">
+          <%= for {segment, child} <- children do %>
+            <% count = child[:_count] || 0 %>
+            <% total = current[:_count] || 1 %>
+            <% pct = max(8, trunc(count / total * 100)) %>
+            <% is_leaf = leaf_node?(child) %>
+            <button
+              phx-click="treemap_drill"
+              phx-value-segment={segment}
+              class={"rounded-lg p-3 cursor-pointer transition-all text-left flex flex-col justify-between #{treemap_cell_class(segment)}"}
+              style={"flex: #{count} 1 #{pct}%; min-width: 80px; min-height: 80px;"}
+            >
+              <div>
+                <div class="text-sm font-semibold text-base-content truncate">
+                  <%= if is_leaf do %>
+                    <span class="text-secondary"><%= segment %></span>
+                  <% else %>
+                    <span class="text-primary"><%= segment %></span>
+                  <% end %>
+                </div>
+                <div class="text-[10px] text-[color:var(--tn-text-muted)] mt-0.5">
+                  <%= count %> endpoint<%= if count != 1, do: "s" %>
+                </div>
+              </div>
+              <%= if is_leaf do %>
+                <div class="flex gap-1 flex-wrap mt-2">
+                  <%= for route <- Map.get(child, :_routes, []) do %>
+                    <%= for m <- route.methods do %>
+                      <span class={"inline-block w-1.5 h-1.5 rounded-full #{method_dot_color(m)}"}></span>
+                    <% end %>
+                  <% end %>
+                </div>
+              <% end %>
+            </button>
+          <% end %>
+        </div>
+
+        <%!-- Routes at this level (not in a sub-segment) --%>
+        <% own_routes = Map.get(current, :_routes, []) %>
+        <%= if own_routes != [] do %>
+          <div class="mt-3 border-t border-neutral pt-3">
+            <div class="text-xs text-[color:var(--tn-text-muted)] mb-2">
+              Endpoints at /<%= Enum.join(@treemap_path, "/") %>
+            </div>
+            <div class="space-y-0.5">
+              <%= for route <- own_routes, method <- route.methods do %>
+                <div class="flex items-center gap-2.5 py-1 text-sm">
+                  <.method_pill method={method} />
+                  <span class="font-mono text-base-content"><%= for {type, seg} <- format_path(route.path) do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= seg %></span><% else %><%= seg %><% end %><% end %></span>
+                  <%= if route.description do %>
+                    <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto"><%= route.description %></span>
+                  <% end %>
+                  <%= if route.rate_limit do %>
+                    <span class="text-[color:var(--tn-text-muted)] text-[10px] bg-base-300 px-1.5 py-0.5 rounded"><%= route.rate_limit %>/min</span>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+
+      <% else %>
+        <%!-- Leaf node: show SwaggerUI-style rows --%>
+        <div class="bg-base-200 rounded-lg border border-neutral overflow-hidden">
+          <div class="space-y-0">
+            <%= for row <- leaf_routes(current) do %>
+              <div class="flex items-center gap-2.5 px-4 py-2 border-b border-base-100 last:border-b-0 text-sm">
+                <div class="flex-shrink-0 w-16">
+                  <.method_pill method={row.method} />
+                </div>
+                <span class="font-mono text-base-content"><%= for {type, seg} <- row.path_parts do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= seg %></span><% else %><%= seg %><% end %><% end %></span>
+                <%= if row.rate_limit do %>
+                  <span class="flex-shrink-0 text-[10px] bg-base-300 border border-neutral px-1.5 py-0.5 rounded text-[color:var(--tn-text-muted)]"><%= row.rate_limit %>/min</span>
+                <% end %>
+                <%= if row.description do %>
+                  <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto truncate max-w-[200px]"><%= row.description %></span>
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
     <% end %>
   </div>
 
   <%!-- Provider config sections --%>
-  <% configured = Enum.filter(~w(nginx aws cloudflare azure gcp caddy), fn provider ->
-    drift = Map.get(@drifts, provider)
-    drift && drift.status != :never_generated
-  end) %>
-
   <div class="space-y-2">
     <div class="flex items-center gap-3 mb-2">
       <span class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)]">
@@ -97,103 +198,102 @@
       <% end %>
     </div>
 
-      <%= for provider <- configured do %>
-        <% drift = Map.get(@drifts, provider) %>
-        <% expanded = MapSet.member?(@expanded_providers, provider) %>
-        <div class={[
-          "rounded-lg border overflow-hidden",
-          drift.status == :drifted && "border-warning",
-          drift.status == :current && "border-neutral"
-        ]}>
-          <%!-- Provider header / toggle --%>
-          <button
-            class="w-full flex items-center justify-between px-4 py-2.5 bg-base-300 hover:bg-base-200 transition-colors cursor-pointer"
-            phx-click="toggle_provider"
-            phx-value-provider={provider}
-          >
-            <div class="flex items-center gap-2">
-              <WaggerWeb.WaggerComponents.provider_badge
-                provider={provider}
-                status={drift.status}
-                summary={drift_summary(drift)}
-              />
-            </div>
-            <span class="text-xs text-[color:var(--tn-text-muted)]">
-              <%= if expanded, do: "▲", else: "▼" %>
-            </span>
-          </button>
+    <% configured = Enum.filter(@all_providers, fn provider ->
+      drift = Map.get(@drifts, provider)
+      drift && drift.status != :never_generated
+    end) %>
 
-          <%!-- Expanded body --%>
-          <%= if expanded do %>
-            <% snap = Map.get(@snapshots, provider) %>
-            <% config_params = snapshot_config(@snapshots, provider) %>
-            <div class="px-4 py-3 bg-base-200 border-t border-neutral space-y-3">
-              <%!-- Action buttons --%>
-              <div class="flex items-center gap-2">
-                <button
-                  phx-click="regenerate"
-                  phx-value-provider={provider}
-                  class={"px-3 py-1.5 rounded text-xs font-bold #{if drift.status == :drifted, do: "bg-warning text-base-100", else: "bg-primary text-primary-content"}"}
-                >
-                  Regenerate
-                </button>
-                <%= if snap do %>
-                  <span class="text-xs text-[color:var(--tn-text-muted)]">
-                    Last generated: <%= snap.inserted_at %>
-                  </span>
+    <%= for provider <- configured do %>
+      <% drift = Map.get(@drifts, provider) %>
+      <% expanded = MapSet.member?(@expanded_providers, provider) %>
+      <div class={[
+        "rounded-lg border overflow-hidden",
+        drift.status == :drifted && "border-warning",
+        drift.status == :current && "border-neutral"
+      ]}>
+        <button
+          class="w-full flex items-center justify-between px-4 py-2.5 bg-base-300 hover:bg-base-200 transition-colors cursor-pointer"
+          phx-click="toggle_provider"
+          phx-value-provider={provider}
+        >
+          <div class="flex items-center gap-2">
+            <WaggerWeb.WaggerComponents.provider_badge
+              provider={provider}
+              status={drift.status}
+              summary={drift_summary(drift)}
+            />
+          </div>
+          <span class="text-xs text-[color:var(--tn-text-muted)]">
+            <%= if expanded, do: "▲", else: "▼" %>
+          </span>
+        </button>
+
+        <%= if expanded do %>
+          <% snap = Map.get(@snapshots, provider) %>
+          <% config_params = snapshot_config(@snapshots, provider) %>
+          <div class="px-4 py-3 bg-base-200 border-t border-neutral space-y-3">
+            <div class="flex items-center gap-2">
+              <button
+                phx-click="regenerate"
+                phx-value-provider={provider}
+                class={"px-3 py-1.5 rounded text-xs font-bold #{if drift.status == :drifted, do: "bg-warning text-base-100", else: "bg-primary text-primary-content"}"}
+              >
+                Regenerate
+              </button>
+              <%= if snap do %>
+                <span class="text-xs text-[color:var(--tn-text-muted)]">
+                  Last generated: <%= snap.inserted_at %>
+                </span>
+              <% end %>
+            </div>
+
+            <%= if config_params != %{} do %>
+              <div class="flex gap-4 text-xs">
+                <%= for {key, value} <- config_params do %>
+                  <div>
+                    <span class="text-[color:var(--tn-text-muted)]"><%= key %>:</span>
+                    <span class="bg-base-100 border border-neutral px-2 py-0.5 rounded text-base-content"><%= value %></span>
+                  </div>
                 <% end %>
               </div>
+            <% end %>
 
-              <%!-- Config params from last generation --%>
-              <%= if config_params != %{} do %>
-                <div class="flex gap-4 text-xs">
-                  <%= for {key, value} <- config_params do %>
-                    <div>
-                      <span class="text-[color:var(--tn-text-muted)]"><%= key %>:</span>
-                      <span class="bg-base-100 border border-neutral px-2 py-0.5 rounded text-base-content"><%= value %></span>
-                    </div>
-                  <% end %>
+            <%= if drift.status == :drifted do %>
+              <div>
+                <div class="mb-1 text-xs text-[color:var(--tn-text-muted)] font-semibold uppercase tracking-wide">
+                  Changes since last generation
                 </div>
-              <% end %>
+                <WaggerWeb.WaggerComponents.drift_diff changes={drift.changes} />
+              </div>
+            <% end %>
 
-              <%!-- Drift diff --%>
-              <%= if drift.status == :drifted do %>
-                <div>
-                  <div class="mb-1 text-xs text-[color:var(--tn-text-muted)] font-semibold uppercase tracking-wide">
-                    Changes since last generation
+            <%= if snap do %>
+              <div>
+                <button
+                  phx-click="toggle_output"
+                  phx-value-provider={provider}
+                  class="text-xs text-[color:var(--tn-text-muted)] hover:text-base-content cursor-pointer"
+                >
+                  <%= if MapSet.member?(@show_output, provider), do: "▼", else: "▶" %>
+                  Show generated config (<%= byte_size(snap.output) %> bytes)
+                </button>
+                <%= if MapSet.member?(@show_output, provider) do %>
+                  <div class="relative mt-2">
+                    <button
+                      phx-click={JS.dispatch("wagger:copy", to: "#config-output-#{provider}")}
+                      class="absolute top-2 right-2 text-xs text-[color:var(--tn-text-muted)] hover:text-base-content bg-base-200 border border-neutral px-2 py-0.5 rounded cursor-pointer z-10"
+                    >
+                      Copy
+                    </button>
+                    <pre id={"config-output-#{provider}"} class="p-3 bg-base-100 border border-neutral rounded text-xs overflow-x-auto max-h-96 overflow-y-auto"><code><%= snap.output %></code></pre>
                   </div>
-                  <WaggerWeb.WaggerComponents.drift_diff changes={drift.changes} />
-                </div>
-              <% end %>
-
-              <%!-- Generated config output (collapsible) --%>
-              <%= if snap do %>
-                <div>
-                  <button
-                    phx-click="toggle_output"
-                    phx-value-provider={provider}
-                    class="text-xs text-[color:var(--tn-text-muted)] hover:text-base-content cursor-pointer"
-                  >
-                    <%= if MapSet.member?(@show_output, provider), do: "▼", else: "▶" %>
-                    Show generated config (<%= byte_size(snap.output) %> bytes)
-                  </button>
-                  <%= if MapSet.member?(@show_output, provider) do %>
-                    <div class="relative mt-2">
-                      <button
-                        phx-click={JS.dispatch("wagger:copy", to: "#config-output-#{provider}")}
-                        class="absolute top-2 right-2 text-xs text-[color:var(--tn-text-muted)] hover:text-base-content bg-base-200 border border-neutral px-2 py-0.5 rounded cursor-pointer z-10"
-                      >
-                        Copy
-                      </button>
-                      <pre id={"config-output-#{provider}"} class="p-3 bg-base-100 border border-neutral rounded text-xs overflow-x-auto max-h-96 overflow-y-auto"><code><%= snap.output %></code></pre>
-                    </div>
-                  <% end %>
-                </div>
-              <% end %>
-            </div>
-          <% end %>
-        </div>
-      <% end %>
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
   </div>
 
   <%!-- Import section --%>

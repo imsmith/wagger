@@ -2,7 +2,7 @@ defmodule WaggerWeb.AppDetailLive do
   @moduledoc """
   LiveView for the App Detail page.
 
-  Displays application metadata, routes in a SwaggerUI-style grouped layout,
+  Displays application metadata, routes as a nested drill-down treemap,
   collapsible provider config sections with drift diffs, and an import area.
   """
 
@@ -20,7 +20,7 @@ defmodule WaggerWeb.AppDetailLive do
   def mount(%{"id" => id}, _session, socket) do
     app = Applications.get_application!(id)
     routes = Routes.list_routes(app)
-    grouped_routes = group_routes(routes)
+    route_tree = build_route_tree(routes)
 
     drifts =
       Map.new(@providers, fn provider ->
@@ -34,17 +34,19 @@ defmodule WaggerWeb.AppDetailLive do
       |> MapSet.new()
 
     snapshots = load_latest_snapshots(app)
-    show_output = MapSet.new()
 
     socket =
       assign(socket,
         app: app,
         routes: routes,
-        grouped_routes: grouped_routes,
+        route_tree: route_tree,
+        treemap_path: [],
+        search_query: "",
+        search_results: nil,
         drifts: drifts,
         expanded_providers: expanded_providers,
         snapshots: snapshots,
-        show_output: show_output,
+        show_output: MapSet.new(),
         show_import: false,
         all_providers: @providers,
         active_nav: nil
@@ -53,18 +55,57 @@ defmodule WaggerWeb.AppDetailLive do
     {:ok, socket}
   end
 
+  # -- Treemap navigation events --
+
+  @impl true
+  def handle_event("treemap_drill", %{"segment" => segment}, socket) do
+    new_path = socket.assigns.treemap_path ++ [segment]
+    {:noreply, assign(socket, treemap_path: new_path, search_query: "", search_results: nil)}
+  end
+
+  @impl true
+  def handle_event("treemap_back", %{"depth" => depth_str}, socket) do
+    depth = String.to_integer(depth_str)
+    new_path = Enum.take(socket.assigns.treemap_path, depth)
+    {:noreply, assign(socket, treemap_path: new_path, search_query: "", search_results: nil)}
+  end
+
+  @impl true
+  def handle_event("search_routes", %{"query" => query}, socket) do
+    results =
+      if String.trim(query) == "" do
+        nil
+      else
+        q = String.downcase(query)
+        socket.assigns.routes
+        |> Enum.filter(fn r ->
+          String.contains?(String.downcase(r.path), q) or
+            String.contains?(String.downcase(r.description || ""), q)
+        end)
+        |> Enum.flat_map(fn route ->
+          Enum.map(route.methods, fn method ->
+            %{method: method, path: route.path, path_parts: format_path(route.path),
+              description: route.description, rate_limit: route.rate_limit}
+          end)
+        end)
+      end
+
+    {:noreply, assign(socket, search_query: query, search_results: results)}
+  end
+
+  # -- Provider events --
+
   @impl true
   def handle_event("toggle_provider", %{"provider" => provider}, socket) do
     expanded =
-      if MapSet.member?(socket.assigns.expanded_providers, provider) do
-        MapSet.delete(socket.assigns.expanded_providers, provider)
-      else
-        MapSet.put(socket.assigns.expanded_providers, provider)
-      end
+      if MapSet.member?(socket.assigns.expanded_providers, provider),
+        do: MapSet.delete(socket.assigns.expanded_providers, provider),
+        else: MapSet.put(socket.assigns.expanded_providers, provider)
 
     {:noreply, assign(socket, :expanded_providers, expanded)}
   end
 
+  @impl true
   def handle_event("toggle_import", _params, socket) do
     {:noreply, assign(socket, :show_import, !socket.assigns.show_import)}
   end
@@ -96,7 +137,6 @@ defmodule WaggerWeb.AppDetailLive do
 
   @impl true
   def handle_event("quick_generate", %{"provider" => provider}, socket) do
-    # Use default config for the provider, with app name as prefix
     default_config = default_config_for(provider, socket.assigns.app.name)
     handle_event("regenerate", %{"provider" => provider, "config_override" => default_config}, socket)
   end
@@ -128,7 +168,6 @@ defmodule WaggerWeb.AppDetailLive do
           checksum: checksum
         })
 
-        # Reload state
         drifts = Map.new(@providers, fn p -> {p, Drift.detect(app, p)} end)
         snapshots = load_latest_snapshots(app)
 
@@ -145,75 +184,141 @@ defmodule WaggerWeb.AppDetailLive do
     end
   end
 
+  # ---------------------------------------------------------------------------
+  # Route tree building
+  # ---------------------------------------------------------------------------
+
   @doc """
-  Groups route+method combinations by common prefix (first two path segments).
+  Builds a nested tree from flat route paths.
 
-  Each route with N methods becomes N separate rows. Groups are keyed by the
-  first two path segments, e.g. "/api/users" covers both "/api/users" and
-  "/api/users/{id}". Routes without two segments go under "other".
-
-  Returns a list of `{group_key, [row]}` tuples sorted by group key, where each
-  row is a map with keys: `:method`, `:path`, `:path_parts`, `:description`,
-  `:rate_limit`, `:tags`.
+  Returns a map of `%{segment => %{children: %{...}, routes: [route], count: N}}`.
+  The tree can be traversed by following path segments. `count` is the total
+  number of routes (leaf endpoints × methods) in this subtree.
   """
-  def group_routes(routes) do
-    rows =
-      Enum.flat_map(routes, fn route ->
-        Enum.map(route.methods, fn method ->
-          %{
-            method: method,
-            path: route.path,
-            path_parts: format_path(route.path),
-            description: route.description,
-            rate_limit: route.rate_limit,
-            tags: route.tags
-          }
-        end)
-      end)
+  def build_route_tree(routes) do
+    Enum.reduce(routes, %{}, fn route, tree ->
+      segments = String.split(route.path, "/", trim: true)
+      insert_route(tree, segments, route)
+    end)
+    |> compute_counts()
+  end
 
-    rows
-    |> Enum.group_by(fn row -> route_group_key(row.path) end)
-    |> Enum.sort_by(fn {key, _} -> key end)
+  defp insert_route(tree, [], route) do
+    Map.update(tree, :_routes, [route], &[route | &1])
+  end
+
+  defp insert_route(tree, [segment | rest], route) do
+    child = Map.get(tree, segment, %{})
+    Map.put(tree, segment, insert_route(child, rest, route))
+  end
+
+  defp compute_counts(tree) when is_map(tree) do
+    leaf_routes = Map.get(tree, :_routes, [])
+    leaf_count = Enum.sum(Enum.map(leaf_routes, fn r -> length(r.methods) end))
+
+    children =
+      tree
+      |> Map.drop([:_routes, :_count])
+      |> Map.new(fn {k, v} -> {k, compute_counts(v)} end)
+
+    child_count = children |> Map.values() |> Enum.reduce(0, fn c, acc -> acc + (c[:_count] || 0) end)
+
+    children
+    |> Map.put(:_routes, leaf_routes)
+    |> Map.put(:_count, leaf_count + child_count)
   end
 
   @doc """
-  Splits a path on `{param}` boundaries into a list of `{type, segment}` tuples.
-
-  Static path segments become `{"path", text}` tuples; parameter segments
-  become `{"param", text}` tuples.
-
-  ## Examples
-
-      iex> format_path("/api/users/{id}")
-      [{"path", "/api/users/"}, {"param", "{id}"}]
-
-      iex> format_path("/health")
-      [{"path", "/health"}]
+  Returns the subtree at the current treemap drill-down path.
   """
+  def current_subtree(tree, []), do: tree
+
+  def current_subtree(tree, [segment | rest]) do
+    case Map.get(tree, segment) do
+      nil -> %{_routes: [], _count: 0}
+      child -> current_subtree(child, rest)
+    end
+  end
+
+  @doc """
+  Returns the children of a tree node as a sorted list of {segment, child_node} tuples.
+  Excludes the :_routes and :_count metadata keys. Sorted by count descending.
+  """
+  def tree_children(node) do
+    node
+    |> Map.drop([:_routes, :_count])
+    |> Enum.sort_by(fn {_seg, child} -> -(child[:_count] || 0) end)
+  end
+
+  @doc """
+  Returns whether a tree node is a leaf (has no child segments, only routes).
+  """
+  def leaf_node?(node) do
+    tree_children(node) == []
+  end
+
+  @doc """
+  Returns all routes under a tree node, flattened and expanded into method rows.
+  """
+  def leaf_routes(node) do
+    collect_routes(node)
+    |> Enum.flat_map(fn route ->
+      Enum.map(route.methods, fn method ->
+        %{method: method, path: route.path, path_parts: format_path(route.path),
+          description: route.description, rate_limit: route.rate_limit}
+      end)
+    end)
+    |> Enum.sort_by(& &1.path)
+  end
+
+  defp collect_routes(node) when is_map(node) do
+    own = Map.get(node, :_routes, [])
+    child_routes =
+      node
+      |> Map.drop([:_routes, :_count])
+      |> Map.values()
+      |> Enum.flat_map(&collect_routes/1)
+
+    own ++ child_routes
+  end
+
+  @doc """
+  Determines the treemap cell color class based on the segment name and context.
+  """
+  def treemap_cell_class(_segment) do
+    # Default: current/neutral color. Drift-aware coloring would need
+    # per-route drift status which we can add later.
+    "bg-base-300 border border-neutral hover:border-primary"
+  end
+
+  # ---------------------------------------------------------------------------
+  # Path formatting
+  # ---------------------------------------------------------------------------
+
   def format_path(path) when is_binary(path) do
     path
     |> String.split(~r/(\{[^}]+\})/, include_captures: true, trim: false)
     |> Enum.reject(&(&1 == ""))
     |> Enum.map(fn segment ->
-      if String.starts_with?(segment, "{") do
-        {"param", segment}
-      else
-        {"path", segment}
-      end
+      if String.starts_with?(segment, "{"),
+        do: {"param", segment},
+        else: {"path", segment}
     end)
   end
 
-  @doc """
-  Returns a brief drift summary string for display in provider badges.
+  # ---------------------------------------------------------------------------
+  # Provider helpers
+  # ---------------------------------------------------------------------------
 
-  - `:drifted` — returns "+N added, -N removed"
-  - `:current` — returns "current"
-  - `:never_generated` — returns nil
-  """
+  def method_dot_color("GET"), do: "bg-[var(--tn-method-get)]"
+  def method_dot_color("POST"), do: "bg-[var(--tn-method-post)]"
+  def method_dot_color("PUT"), do: "bg-[var(--tn-method-put)]"
+  def method_dot_color("PATCH"), do: "bg-[var(--tn-method-put)]"
+  def method_dot_color("DELETE"), do: "bg-[var(--tn-method-delete)]"
+  def method_dot_color(_), do: "bg-[var(--tn-method-other)]"
+
   def drift_summary(%Drift{status: :never_generated}), do: nil
-
   def drift_summary(%Drift{status: :current}), do: "current"
-
   def drift_summary(%Drift{status: :drifted, changes: changes}) do
     added = length(changes.added)
     removed = length(changes.removed)
@@ -223,7 +328,6 @@ defmodule WaggerWeb.AppDetailLive do
   defp default_config_for(provider, app_name) when provider in ~w(nginx caddy) do
     %{"prefix" => app_name, "upstream" => "http://upstream:8080"}
   end
-
   defp default_config_for("aws", app_name), do: %{"prefix" => app_name, "scope" => "REGIONAL"}
   defp default_config_for("azure", app_name), do: %{"prefix" => app_name, "mode" => "Prevention"}
   defp default_config_for(_provider, app_name), do: %{"prefix" => app_name}
@@ -235,9 +339,7 @@ defmodule WaggerWeb.AppDetailLive do
     end)
   end
 
-  def config_fields_for(provider) do
-    Map.get(@provider_config_fields, provider, [])
-  end
+  def config_fields_for(provider), do: Map.get(@provider_config_fields, provider, [])
 
   defp load_latest_snapshots(app) do
     Map.new(@providers, fn provider ->
@@ -251,20 +353,4 @@ defmodule WaggerWeb.AppDetailLive do
       snap -> Jason.decode!(snap.config_params || "{}")
     end
   end
-
-  # Returns the group key for a route path: first two non-empty segments joined,
-  # or "other" if fewer than two segments exist.
-  defp route_group_key(path) do
-    segments =
-      path
-      |> String.split("/", trim: true)
-      |> Enum.take(2)
-
-    case segments do
-      [a, b] -> "/#{a}/#{b}"
-      [a] -> "/#{a}"
-      [] -> "other"
-    end
-  end
-
 end
