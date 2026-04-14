@@ -46,6 +46,8 @@ defmodule WaggerWeb.AppDetailLive do
         snapshots: snapshots,
         show_output: show_output,
         show_import: false,
+        show_new_provider: false,
+        selected_new_provider: nil,
         active_nav: nil
       )
 
@@ -84,13 +86,51 @@ defmodule WaggerWeb.AppDetailLive do
     "caddy" => Wagger.Generator.Caddy
   }
 
+  @provider_config_fields %{
+    "nginx" => [{"prefix", "Name prefix"}, {"upstream", "Upstream URL"}],
+    "caddy" => [{"prefix", "Name prefix"}, {"upstream", "Upstream URL"}],
+    "aws" => [{"prefix", "Name prefix"}, {"scope", "REGIONAL or CLOUDFRONT"}],
+    "cloudflare" => [{"prefix", "Name prefix"}],
+    "azure" => [{"prefix", "Name prefix"}, {"mode", "Prevention or Detection"}],
+    "gcp" => [{"prefix", "Name prefix"}]
+  }
+
   @impl true
-  def handle_event("regenerate", %{"provider" => provider}, socket) do
+  def handle_event("toggle_new_provider", _, socket) do
+    {:noreply, assign(socket, :show_new_provider, !socket.assigns[:show_new_provider])}
+  end
+
+  @impl true
+  def handle_event("select_new_provider", %{"provider" => provider}, socket) do
+    {:noreply, assign(socket, :selected_new_provider, provider)}
+  end
+
+  @impl true
+  def handle_event("generate_new", params, socket) do
+    provider = params["provider"]
+    config = Map.drop(params, ["provider", "_target"])
+
+    if provider == "" or is_nil(Map.get(@provider_modules, provider)) do
+      {:noreply, put_flash(socket, :error, "Select a provider")}
+    else
+      # Delegate to the same regenerate logic
+      socket = assign(socket, :snapshots, Map.put(socket.assigns.snapshots, provider, nil))
+      handle_event("regenerate", %{"provider" => provider, "config_override" => config}, socket)
+    end
+  end
+
+  @impl true
+  def handle_event("regenerate", %{"provider" => provider} = params, socket) do
     app = socket.assigns.app
     routes = socket.assigns.routes
     module = Map.get(@provider_modules, provider)
     snapshot = Map.get(socket.assigns.snapshots, provider)
-    config = if snapshot, do: Jason.decode!(snapshot.config_params || "{}"), else: %{}
+
+    config =
+      case params do
+        %{"config_override" => override} when override != %{} -> override
+        _ -> if snapshot, do: Jason.decode!(snapshot.config_params || "{}"), else: %{}
+      end
 
     route_data = Drift.normalize_for_snapshot(routes)
 
@@ -196,6 +236,17 @@ defmodule WaggerWeb.AppDetailLive do
     added = length(changes.added)
     removed = length(changes.removed)
     "+#{added} added, -#{removed} removed"
+  end
+
+  def unconfigured_providers(drifts) do
+    Enum.filter(@providers, fn provider ->
+      drift = Map.get(drifts, provider)
+      drift && drift.status == :never_generated
+    end)
+  end
+
+  def config_fields_for(provider) do
+    Map.get(@provider_config_fields, provider, [])
   end
 
   defp load_latest_snapshots(app) do
