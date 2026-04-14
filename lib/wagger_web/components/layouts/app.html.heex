@@ -1,0 +1,20 @@
+<div class="min-h-screen bg-base-100 font-mono">
+  <nav class="bg-base-200 border-b border-neutral px-4 py-2.5 flex items-center justify-between">
+    <div class="flex items-center gap-6">
+      <.link navigate={~p"/"} class="text-primary font-bold text-lg">wagger</.link>
+      <div class="flex items-center gap-4 text-sm">
+        <.link navigate={~p"/"} class={"#{if @active_nav == :dashboard, do: "text-base-content", else: "text-[color:var(--tn-text-muted)] hover:text-base-content"}"}>
+          Dashboard
+        </.link>
+        <.link navigate={~p"/users"} class={"#{if @active_nav == :users, do: "text-base-content", else: "text-[color:var(--tn-text-muted)] hover:text-base-content"}"}>
+          Users
+        </.link>
+      </div>
+    </div>
+    <span class="text-sm text-[color:var(--tn-text-muted)]">wagger</span>
+  </nav>
+  <main class="p-4">
+    <.flash_group flash={@flash} />
+    {@inner_content}
+  </main>
+</div>

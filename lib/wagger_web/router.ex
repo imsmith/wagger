@@ -20,7 +20,11 @@ defmodule WaggerWeb.Router do
   scope "/", WaggerWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live_session :default, on_mount: [{WaggerWeb.Hooks.NavHook, :default}] do
+      live "/", DashboardLive, :index
+      live "/applications/:id", AppDetailLive, :show
+      live "/users", UserLive, :index
+    end
   end
 
   scope "/api", WaggerWeb do
@@ -38,5 +42,9 @@ defmodule WaggerWeb.Router do
     post "/applications/:application_id/import/confirm", ImportController, :confirm
 
     post "/applications/:application_id/generate/:provider", GenerateController, :create
+
+    get "/applications/:application_id/snapshots", SnapshotController, :index
+    get "/applications/:application_id/snapshots/:id", SnapshotController, :show
+    get "/applications/:application_id/drift/:provider", DriftController, :show
   end
 end
