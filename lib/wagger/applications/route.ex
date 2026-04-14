@@ -2,17 +2,24 @@ defmodule Wagger.Applications.Route do
   @moduledoc """
   Ecto schema for a Route belonging to an Application.
 
-  This module is a placeholder stub created to satisfy Ecto's association
-  resolution for `Wagger.Applications.Application.has_many :routes`. Task 5
-  will expand this into the full Route schema with changeset and context.
+  Routes describe individual API endpoints within an application. Each route has
+  a path, one or more HTTP methods, a path_type (exact, prefix, or regex), and
+  optional metadata including description, query_params, headers, rate_limit,
+  and tags.
+
+  Tags and methods are stored as EDN lists. Query params and headers are stored
+  as EDN map lists.
   """
 
   use Ecto.Schema
+  import Ecto.Changeset
 
   @timestamps_opts [
     type: :string,
     autogenerate: {Wagger.Applications.Application, :timestamp_now, []}
   ]
+
+  @valid_path_types ~w(exact prefix regex)
 
   schema "routes" do
     field :path, :string
@@ -27,5 +34,29 @@ defmodule Wagger.Applications.Route do
     belongs_to :application, Wagger.Applications.Application
 
     timestamps(type: :string)
+  end
+
+  @doc """
+  Changeset for creating or updating a Route.
+
+  Casts all fields, requires path and path_type, validates path_type is one of
+  "exact", "prefix", or "regex", defaults methods to ["GET"] when absent or
+  empty, and enforces uniqueness of path within an application.
+  """
+  def changeset(route, attrs) do
+    route
+    |> cast(attrs, [:path, :methods, :path_type, :description, :query_params, :headers, :rate_limit, :tags])
+    |> validate_required([:path, :path_type])
+    |> validate_inclusion(:path_type, @valid_path_types)
+    |> put_default_methods()
+    |> unique_constraint([:application_id, :path])
+  end
+
+  defp put_default_methods(changeset) do
+    case get_field(changeset, :methods) do
+      nil -> put_change(changeset, :methods, ["GET"])
+      [] -> put_change(changeset, :methods, ["GET"])
+      _ -> changeset
+    end
   end
 end
