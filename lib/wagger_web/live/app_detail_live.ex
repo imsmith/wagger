@@ -14,7 +14,7 @@ defmodule WaggerWeb.AppDetailLive do
   alias Wagger.Routes
   alias Wagger.Snapshots
 
-  @providers ~w(nginx aws cloudflare azure gcp caddy)
+  @providers ~w(aws azure caddy cloudflare coraza gcp nginx zap)
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -123,7 +123,9 @@ defmodule WaggerWeb.AppDetailLive do
     "cloudflare" => Wagger.Generator.Cloudflare,
     "azure" => Wagger.Generator.Azure,
     "gcp" => Wagger.Generator.Gcp,
-    "caddy" => Wagger.Generator.Caddy
+    "caddy" => Wagger.Generator.Caddy,
+    "coraza" => Wagger.Generator.Coraza,
+    "zap" => Wagger.Generator.Zap
   }
 
   @provider_config_fields %{
@@ -132,7 +134,9 @@ defmodule WaggerWeb.AppDetailLive do
     "aws" => [{"prefix", "Name prefix"}, {"scope", "REGIONAL or CLOUDFRONT"}],
     "cloudflare" => [{"prefix", "Name prefix"}],
     "azure" => [{"prefix", "Name prefix"}, {"mode", "Prevention or Detection"}],
-    "gcp" => [{"prefix", "Name prefix"}]
+    "gcp" => [{"prefix", "Name prefix"}],
+    "coraza" => [{"prefix", "Name prefix"}, {"start_rule_id", "Starting rule ID (default 100001)"}],
+    "zap" => [{"prefix", "Name prefix"}, {"target_url", "Target URL (or {{TARGET_URL}})"}]
   }
 
   @impl true
@@ -333,6 +337,7 @@ defmodule WaggerWeb.AppDetailLive do
   end
   defp default_config_for("aws", app_name), do: %{"prefix" => app_name, "scope" => "REGIONAL"}
   defp default_config_for("azure", app_name), do: %{"prefix" => app_name, "mode" => "Prevention"}
+  defp default_config_for("zap", app_name), do: %{"prefix" => app_name, "target_url" => "{{TARGET_URL}}"}
   defp default_config_for(_provider, app_name), do: %{"prefix" => app_name}
 
   @doc "Returns providers that have never been generated for this app."

@@ -78,7 +78,7 @@ Foundation for drift detection. Records what was generated, when, for which prov
 |-------|------|-------|
 | id | integer | PK |
 | application_id | integer | FK |
-| provider | text | `aws`, `cloudflare`, `azure`, `gcp`, `nginx`, `caddy` |
+| provider | text | `aws`, `cloudflare`, `azure`, `gcp`, `nginx`, `caddy`, `coraza`, `zap` |
 | config_params | text | EDN — provider-specific config |
 | route_snapshot | text | EDN — frozen copy of routes at generation time |
 | output | text | generated config verbatim |
@@ -262,6 +262,8 @@ Built in Wagger on top of what `ex_yang` provides. `ex_yang` parses and resolves
 - **GCP Cloud Armor** (`Wagger.Generator.Gcp`) — Security policy JSON. CEL expressions for path matching.
 - **Nginx** (`Wagger.Generator.Nginx`) — nginx.conf text. `map` directive for path validation, `location` blocks with `limit_except`, `limit_req` zones.
 - **Caddy** (`Wagger.Generator.Caddy`) — Caddyfile text. `route` blocks with `@matcher` directives, `respond 403` for unmatched, `rate_limit` directive.
+- **Coraza/ModSecurity** (`Wagger.Generator.Coraza`) — SecLang `.conf` file. Per-route `SecRule` with chained `REQUEST_METHOD` enforcement, catch-all deny. Rate limits emitted as comments (not natively supported). Configurable starting rule ID (default 100001).
+- **OWASP ZAP** (`Wagger.Generator.Zap`) — ZAP automation framework YAML. Three `requestor` jobs: positive tests (allowed routes return non-403), negative method tests (disallowed methods return 403), negative path tests (synthetic bad paths return 403). Configurable target URL with placeholder fallback.
 
 ### Path Translation
 

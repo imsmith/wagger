@@ -13,7 +13,7 @@ defmodule WaggerWeb.DashboardLive do
   alias Wagger.Import
   alias Wagger.Routes
 
-  @providers ~w(nginx aws cloudflare azure gcp caddy)
+  @providers ~w(aws azure caddy cloudflare coraza gcp nginx zap)
 
   @impl true
   def mount(_params, _session, socket) do
@@ -82,38 +82,6 @@ defmodule WaggerWeb.DashboardLive do
     do_preview(input, name, socket)
   end
 
-  defp do_preview(input, name, socket) do
-    mode = socket.assigns.new_app_import_mode
-
-    {parsed, skipped, suggested_name} =
-      case mode do
-        "openapi" ->
-          case Jason.decode(input) do
-            {:ok, spec} ->
-              {routes, errors} = Import.OpenApi.parse(spec)
-              title = get_in(spec, ["info", "title"]) || ""
-              suggested = title |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-") |> String.trim("-")
-              {routes, errors, suggested}
-            {:error, _} ->
-              {[], ["Invalid JSON"], ""}
-          end
-        "bulk" ->
-          {routes, skipped} = Import.Bulk.parse(input)
-          {routes, skipped, ""}
-        "accesslog" ->
-          {routes, skipped} = Import.AccessLog.parse(input)
-          {routes, skipped, ""}
-      end
-
-    app_name = if name == "" and suggested_name != "", do: suggested_name, else: name
-
-    {:noreply, assign(socket,
-      new_app_name: app_name,
-      new_app_input: input,
-      new_app_preview: %{parsed: parsed, skipped: skipped}
-    )}
-  end
-
   @impl true
   def handle_event("create_new_app", %{"name" => name}, socket) do
     preview = socket.assigns.new_app_preview
@@ -144,6 +112,38 @@ defmodule WaggerWeb.DashboardLive do
           {:noreply, put_flash(socket, :error, msg)}
       end
     end
+  end
+
+  defp do_preview(input, name, socket) do
+    mode = socket.assigns.new_app_import_mode
+
+    {parsed, skipped, suggested_name} =
+      case mode do
+        "openapi" ->
+          case Jason.decode(input) do
+            {:ok, spec} ->
+              {routes, errors} = Import.OpenApi.parse(spec)
+              title = get_in(spec, ["info", "title"]) || ""
+              suggested = title |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-") |> String.trim("-")
+              {routes, errors, suggested}
+            {:error, _} ->
+              {[], ["Invalid JSON"], ""}
+          end
+        "bulk" ->
+          {routes, skipped} = Import.Bulk.parse(input)
+          {routes, skipped, ""}
+        "accesslog" ->
+          {routes, skipped} = Import.AccessLog.parse(input)
+          {routes, skipped, ""}
+      end
+
+    app_name = if name == "" and suggested_name != "", do: suggested_name, else: name
+
+    {:noreply, assign(socket,
+      new_app_name: app_name,
+      new_app_input: input,
+      new_app_preview: %{parsed: parsed, skipped: skipped}
+    )}
   end
 
   # ---------------------------------------------------------------------------

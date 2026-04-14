@@ -580,7 +580,7 @@ Several directions are natural next steps.
 
 **OpenAPI import.**  If an application publishes an OpenAPI (Swagger) specification, it already contains path definitions, method restrictions, and parameter schemas in a standardized format.  An OpenAPI importer would be the highest-fidelity route discovery mechanism.
 
-**Additional providers.**  Akamai, Fastly, and Google Cloud Armor each have their own WAF configuration formats.  The generator architecture (a function that takes routes and config, returns a string) makes adding new providers straightforward.
+**Additional providers.**  Akamai and Fastly each have their own WAF configuration formats.  The generator architecture (a function that takes routes and config, returns a string) makes adding new providers straightforward.  GCP Cloud Armor, Coraza/ModSecurity, and OWASP ZAP have already been added using this pattern.
 
 **Drift detection.**  Given access to both the route definition file and the deployed WAF configuration, a diff tool could detect when they diverge -- routes added to the application but not to the WAF, or stale WAF rules for routes that no longer exist.
 
@@ -589,6 +589,6 @@ Several directions are natural next steps.
 
 ## Summary
 
-The WAF Rule Generator separates two concerns that are usually tangled together:  knowing what your application exposes, and telling your WAF about it.  The canonical route schema captures the first concern in a provider-agnostic format.  The generators handle the second, translating that knowledge into AWS WAF JSON, Cloudflare expressions, Azure Front Door policies, Nginx configs, and Terraform resources.
+The WAF Rule Generator separates two concerns that are usually tangled together:  knowing what your application exposes, and telling your WAF about it.  The canonical route schema captures the first concern in a provider-agnostic format.  The generators handle the second, translating that knowledge into AWS WAF JSON, Cloudflare expressions, Azure Front Door policies, GCP Cloud Armor policies, Nginx configs, Caddy configs, Coraza/ModSecurity SecRule directives, and OWASP ZAP automation test plans.
 
 The literate structure of this document is intentional.  WAF rules are security-critical infrastructure.  Understanding *why* a rule is shaped the way it is -- why text transformations are applied, why rate limits are multiplied by five, why method groups are compressed -- matters as much as having the rule in the first place.  When the next engineer inherits this system, the prose and the code are in the same place.

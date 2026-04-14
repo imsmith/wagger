@@ -22,7 +22,9 @@ defmodule WaggerWeb.GenerateController do
     "cloudflare" => Wagger.Generator.Cloudflare,
     "azure" => Wagger.Generator.Azure,
     "gcp" => Wagger.Generator.Gcp,
-    "caddy" => Wagger.Generator.Caddy
+    "caddy" => Wagger.Generator.Caddy,
+    "coraza" => Wagger.Generator.Coraza,
+    "zap" => Wagger.Generator.Zap
   }
 
   def create(conn, %{"application_id" => app_id, "provider" => provider} = params) do

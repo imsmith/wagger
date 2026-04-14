@@ -87,6 +87,45 @@ defmodule WaggerWeb.GenerateControllerTest do
     end
   end
 
+  describe "create — coraza" do
+    test "returns output containing SecRuleEngine directive", %{conn: conn, app: app} do
+      conn = post(conn, ~p"/api/applications/#{app.id}/generate/coraza", %{"prefix" => "test"})
+
+      assert %{
+               "output" => output,
+               "provider" => "coraza",
+               "snapshot_id" => snapshot_id
+             } = json_response(conn, 200)
+
+      assert output =~ "SecRuleEngine On"
+      assert output =~ "SecRule REQUEST_URI"
+      assert output =~ "SecRule REQUEST_METHOD"
+      assert is_integer(snapshot_id)
+    end
+  end
+
+  describe "create — zap" do
+    test "returns output containing ZAP automation plan", %{conn: conn, app: app} do
+      conn =
+        post(conn, ~p"/api/applications/#{app.id}/generate/zap", %{
+          "prefix" => "test",
+          "target_url" => "https://staging.example.com"
+        })
+
+      assert %{
+               "output" => output,
+               "provider" => "zap",
+               "snapshot_id" => snapshot_id
+             } = json_response(conn, 200)
+
+      assert output =~ "waf-positive-tests"
+      assert output =~ "waf-negative-method-tests"
+      assert output =~ "waf-negative-path-tests"
+      assert output =~ "https://staging.example.com"
+      assert is_integer(snapshot_id)
+    end
+  end
+
   describe "create — unknown provider" do
     test "returns 400 with error message", %{conn: conn, app: app} do
       conn = post(conn, ~p"/api/applications/#{app.id}/generate/bogus", %{})

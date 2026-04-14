@@ -1,0 +1,92 @@
+module wagger-coraza {
+  namespace "urn:wagger:coraza";
+  prefix wcz;
+
+  organization "Wagger Project";
+  description "Data model for Coraza/ModSecurity SecRule WAF configuration.";
+
+  revision 2026-04-14 {
+    description "Initial revision.";
+  }
+
+  container coraza-config {
+    description "Top-level Coraza SecRule WAF configuration.";
+
+    leaf config-name {
+      type string;
+      mandatory true;
+      description "Identifier for this configuration.";
+    }
+
+    leaf generated-at {
+      type string;
+      description "ISO 8601 timestamp of generation.";
+    }
+
+    leaf rule-engine {
+      type enumeration {
+        enum "On";
+        enum "Off";
+        enum "DetectionOnly";
+      }
+      mandatory true;
+      description "SecRuleEngine mode.";
+    }
+
+    leaf default-action-phase {
+      type uint8;
+      mandatory true;
+      description "Default phase for SecDefaultAction.";
+    }
+
+    leaf default-action-status {
+      type uint16;
+      mandatory true;
+      description "Default deny status code.";
+    }
+
+    leaf start-rule-id {
+      type uint32;
+      mandatory true;
+      description "First rule ID in the generated sequence.";
+    }
+
+    list rules {
+      key "id";
+      description "Per-route SecRule entries.";
+
+      leaf id {
+        type uint32;
+        mandatory true;
+        description "Unique SecRule ID.";
+      }
+
+      leaf description {
+        type string;
+        description "Human-readable rule description.";
+      }
+
+      leaf path-pattern {
+        type string;
+        mandatory true;
+        description "Regex pattern for REQUEST_URI matching.";
+      }
+
+      leaf-list methods {
+        type string;
+        description "Allowed HTTP methods for this path.";
+      }
+
+      leaf rate-limit-comment {
+        type string;
+        description "Rate limit annotation for operator reference.";
+      }
+    }
+
+    leaf catch-all-rule-id {
+      type uint32;
+      mandatory true;
+      description "Rule ID for the final catch-all deny rule.";
+    }
+  }
+}
