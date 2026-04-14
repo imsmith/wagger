@@ -1,0 +1,113 @@
+module wagger-azure-fd {
+  namespace "urn:wagger:azure-fd";
+  prefix waf;
+
+  organization "Wagger Project";
+  description "Data model for Azure Front Door WAF policy configuration.";
+
+  revision 2026-04-13 {
+    description "Initial revision.";
+  }
+
+  container azure-fd-policy {
+    description "Top-level Azure Front Door WAF policy.";
+
+    leaf policy-name {
+      type string;
+      mandatory true;
+      description "Name prefix for generated policy elements.";
+    }
+
+    leaf mode {
+      type enumeration {
+        enum "Prevention";
+        enum "Detection";
+      }
+      mandatory true;
+      description "WAF policy mode: Prevention blocks matched requests, Detection only logs them.";
+    }
+
+    container custom-rules {
+      description "Custom rules evaluated before managed rulesets.";
+
+      list rules {
+        key "name";
+        description "Ordered list of custom WAF rules.";
+
+        leaf name {
+          type string;
+          mandatory true;
+          description "Unique rule name.";
+        }
+
+        leaf priority {
+          type uint32;
+          mandatory true;
+          description "Rule evaluation priority; lower values are evaluated first.";
+        }
+
+        leaf rule-type {
+          type enumeration {
+            enum "MatchRule";
+            enum "RateLimitRule";
+          }
+          mandatory true;
+          description "Rule type: MatchRule for static decisions, RateLimitRule for rate-based decisions.";
+        }
+
+        leaf action {
+          type enumeration {
+            enum "Allow";
+            enum "Block";
+            enum "Log";
+            enum "Redirect";
+          }
+          mandatory true;
+          description "Action taken when the rule matches.";
+        }
+
+        leaf rate-limit-threshold {
+          type uint32;
+          description "Request count threshold for RateLimitRule over the rate-limit window.";
+        }
+
+        leaf rate-limit-duration-in-minutes {
+          type uint32;
+          description "Duration in minutes of the rate limit sliding window.";
+        }
+
+        list match-conditions {
+          key "match-variable";
+          description "Conditions that must all match for the rule to fire.";
+
+          leaf match-variable {
+            type string;
+            mandatory true;
+            description "The request attribute to inspect (e.g. RequestUri, RemoteAddr).";
+          }
+
+          leaf operator {
+            type string;
+            mandatory true;
+            description "Comparison operator (e.g. RegEx, IPMatch, GeoMatch).";
+          }
+
+          leaf negate-condition {
+            type boolean;
+            description "When true, the condition matches when the operator does NOT match.";
+          }
+
+          leaf-list match-values {
+            type string;
+            description "Values to compare against the match variable using the operator.";
+          }
+
+          leaf-list transforms {
+            type string;
+            description "Ordered transforms applied to the match variable before comparison.";
+          }
+        }
+      }
+    }
+  }
+}
