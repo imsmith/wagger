@@ -111,14 +111,62 @@
 
           <%!-- Expanded body --%>
           <%= if expanded do %>
-            <div class="px-4 py-3 bg-base-200 border-t border-neutral">
-              <%= if drift.status == :drifted do %>
-                <div class="mb-2 text-xs text-[color:var(--tn-text-muted)] font-semibold uppercase tracking-wide">
-                  Changes since last generation
+            <% snap = Map.get(@snapshots, provider) %>
+            <% config_params = snapshot_config(@snapshots, provider) %>
+            <div class="px-4 py-3 bg-base-200 border-t border-neutral space-y-3">
+              <%!-- Action buttons --%>
+              <div class="flex items-center gap-2">
+                <button
+                  phx-click="regenerate"
+                  phx-value-provider={provider}
+                  class={"px-3 py-1.5 rounded text-xs font-bold #{if drift.status == :drifted, do: "bg-warning text-base-100", else: "bg-primary text-primary-content"}"}
+                >
+                  Regenerate
+                </button>
+                <%= if snap do %>
+                  <span class="text-xs text-[color:var(--tn-text-muted)]">
+                    Last generated: <%= snap.inserted_at %>
+                  </span>
+                <% end %>
+              </div>
+
+              <%!-- Config params from last generation --%>
+              <%= if config_params != %{} do %>
+                <div class="flex gap-4 text-xs">
+                  <%= for {key, value} <- config_params do %>
+                    <div>
+                      <span class="text-[color:var(--tn-text-muted)]"><%= key %>:</span>
+                      <span class="bg-base-100 border border-neutral px-2 py-0.5 rounded text-base-content"><%= value %></span>
+                    </div>
+                  <% end %>
                 </div>
-                <WaggerWeb.WaggerComponents.drift_diff changes={drift.changes} />
-              <% else %>
-                <p class="text-xs text-success">Config is current with live routes.</p>
+              <% end %>
+
+              <%!-- Drift diff --%>
+              <%= if drift.status == :drifted do %>
+                <div>
+                  <div class="mb-1 text-xs text-[color:var(--tn-text-muted)] font-semibold uppercase tracking-wide">
+                    Changes since last generation
+                  </div>
+                  <WaggerWeb.WaggerComponents.drift_diff changes={drift.changes} />
+                </div>
+              <% end %>
+
+              <%!-- Generated config output (collapsible) --%>
+              <%= if snap do %>
+                <div>
+                  <button
+                    phx-click="toggle_output"
+                    phx-value-provider={provider}
+                    class="text-xs text-[color:var(--tn-text-muted)] hover:text-base-content cursor-pointer"
+                  >
+                    <%= if MapSet.member?(@show_output, provider), do: "▼", else: "▶" %>
+                    Show generated config (<%= byte_size(snap.output) %> bytes)
+                  </button>
+                  <%= if MapSet.member?(@show_output, provider) do %>
+                    <pre class="mt-2 p-3 bg-base-100 border border-neutral rounded text-xs overflow-x-auto max-h-96 overflow-y-auto"><code><%= snap.output %></code></pre>
+                  <% end %>
+                </div>
               <% end %>
             </div>
           <% end %>

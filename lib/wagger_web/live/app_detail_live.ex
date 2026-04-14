@@ -10,7 +10,9 @@ defmodule WaggerWeb.AppDetailLive do
 
   alias Wagger.Applications
   alias Wagger.Drift
+  alias Wagger.Generator
   alias Wagger.Routes
+  alias Wagger.Snapshots
 
   @providers ~w(nginx aws cloudflare azure gcp caddy)
 
@@ -31,6 +33,9 @@ defmodule WaggerWeb.AppDetailLive do
       |> Enum.map(fn {provider, _drift} -> provider end)
       |> MapSet.new()
 
+    snapshots = load_latest_snapshots(app)
+    show_output = MapSet.new()
+
     socket =
       assign(socket,
         app: app,
@@ -38,6 +43,8 @@ defmodule WaggerWeb.AppDetailLive do
         grouped_routes: grouped_routes,
         drifts: drifts,
         expanded_providers: expanded_providers,
+        snapshots: snapshots,
+        show_output: show_output,
         show_import: false,
         active_nav: nil
       )
@@ -59,6 +66,61 @@ defmodule WaggerWeb.AppDetailLive do
 
   def handle_event("toggle_import", _params, socket) do
     {:noreply, assign(socket, :show_import, !socket.assigns.show_import)}
+  end
+
+  @impl true
+  def handle_event("toggle_output", %{"provider" => provider}, socket) do
+    show = socket.assigns.show_output
+    new_show = if MapSet.member?(show, provider), do: MapSet.delete(show, provider), else: MapSet.put(show, provider)
+    {:noreply, assign(socket, :show_output, new_show)}
+  end
+
+  @provider_modules %{
+    "nginx" => Wagger.Generator.Nginx,
+    "aws" => Wagger.Generator.Aws,
+    "cloudflare" => Wagger.Generator.Cloudflare,
+    "azure" => Wagger.Generator.Azure,
+    "gcp" => Wagger.Generator.Gcp,
+    "caddy" => Wagger.Generator.Caddy
+  }
+
+  @impl true
+  def handle_event("regenerate", %{"provider" => provider}, socket) do
+    app = socket.assigns.app
+    routes = socket.assigns.routes
+    module = Map.get(@provider_modules, provider)
+    snapshot = Map.get(socket.assigns.snapshots, provider)
+    config = if snapshot, do: Jason.decode!(snapshot.config_params || "{}"), else: %{}
+
+    route_data = Drift.normalize_for_snapshot(routes)
+
+    case Generator.generate(module, route_data, config) do
+      {:ok, output} ->
+        checksum = Drift.compute_checksum(route_data)
+        {:ok, _snap} = Snapshots.create_snapshot(%{
+          application_id: app.id,
+          provider: provider,
+          config_params: Jason.encode!(config),
+          route_snapshot: :erlang.term_to_binary(route_data) |> Base.encode64(),
+          output: output,
+          checksum: checksum
+        })
+
+        # Reload state
+        drifts = Map.new(@providers, fn p -> {p, Drift.detect(app, p)} end)
+        snapshots = load_latest_snapshots(app)
+
+        {:noreply,
+          socket
+          |> assign(:drifts, drifts)
+          |> assign(:snapshots, snapshots)
+          |> assign(:expanded_providers, MapSet.put(socket.assigns.expanded_providers, provider))
+          |> assign(:show_output, MapSet.put(socket.assigns.show_output, provider))
+          |> put_flash(:info, "#{String.capitalize(provider)} config regenerated")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Generation failed: #{inspect(reason)}")}
+    end
   end
 
   @doc """
@@ -134,6 +196,19 @@ defmodule WaggerWeb.AppDetailLive do
     added = length(changes.added)
     removed = length(changes.removed)
     "+#{added} added, -#{removed} removed"
+  end
+
+  defp load_latest_snapshots(app) do
+    Map.new(@providers, fn provider ->
+      {provider, Snapshots.latest_snapshot(app, provider)}
+    end)
+  end
+
+  def snapshot_config(snapshots, provider) do
+    case Map.get(snapshots, provider) do
+      nil -> %{}
+      snap -> Jason.decode!(snap.config_params || "{}")
+    end
   end
 
   # Returns the group key for a route path: first two non-empty segments joined,
