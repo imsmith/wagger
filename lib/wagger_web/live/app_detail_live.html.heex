@@ -178,7 +178,15 @@
                     Show generated config (<%= byte_size(snap.output) %> bytes)
                   </button>
                   <%= if MapSet.member?(@show_output, provider) do %>
-                    <pre class="mt-2 p-3 bg-base-100 border border-neutral rounded text-xs overflow-x-auto max-h-96 overflow-y-auto"><code><%= snap.output %></code></pre>
+                    <div class="relative mt-2">
+                      <button
+                        phx-click={JS.dispatch("wagger:copy", to: "#config-output-#{provider}")}
+                        class="absolute top-2 right-2 text-xs text-[color:var(--tn-text-muted)] hover:text-base-content bg-base-200 border border-neutral px-2 py-0.5 rounded cursor-pointer z-10"
+                      >
+                        Copy
+                      </button>
+                      <pre id={"config-output-#{provider}"} class="p-3 bg-base-100 border border-neutral rounded text-xs overflow-x-auto max-h-96 overflow-y-auto"><code><%= snap.output %></code></pre>
+                    </div>
                   <% end %>
                 </div>
               <% end %>

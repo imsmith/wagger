@@ -81,3 +81,16 @@ if (process.env.NODE_ENV === "development") {
   })
 }
 
+// Copy config output to clipboard
+window.addEventListener("wagger:copy", (e) => {
+  const text = e.target.innerText
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = e.target.previousElementSibling || e.target.parentElement.querySelector("button")
+    if (btn) {
+      const original = btn.innerText
+      btn.innerText = "Copied!"
+      setTimeout(() => { btn.innerText = original }, 1500)
+    }
+  })
+})
+
