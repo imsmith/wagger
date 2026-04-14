@@ -73,7 +73,38 @@ defmodule Wagger.Generator.Cloudflare do
       instance["cloudflare-config"]["rules"]
       |> Enum.map(&rule_to_output/1)
 
-    Jason.encode!(rules, pretty: true)
+    comment = format_expression_comment(rules)
+    json = Jason.encode!(rules, pretty: true)
+
+    comment <> json
+  end
+
+  defp format_expression_comment(rules) do
+    block_rule = Enum.find(rules, &(&1["action"] == "block"))
+
+    if block_rule do
+      expr = block_rule["expression"]
+      # Break "not (A or B or C)" into readable lines
+      inner =
+        expr
+        |> String.trim_leading("not (")
+        |> String.trim_trailing(")")
+        |> String.split(" or ")
+        |> Enum.map_join("\n#     or ", &String.trim/1)
+
+      """
+      # Cloudflare Firewall Rules
+      #
+      # Block expression (human-readable):
+      #   not (
+      #     #{inner}
+      #   )
+      #
+
+      """
+    else
+      ""
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -93,9 +124,9 @@ defmodule Wagger.Generator.Cloudflare do
     inner =
       routes
       |> Enum.map(&build_path_expression/1)
-      |> Enum.join("\n  or ")
+      |> Enum.join(" or ")
 
-    "not (\n  #{inner}\n)"
+    "not (#{inner})"
   end
 
   defp build_path_expression(%{path: path, path_type: "prefix"}) do

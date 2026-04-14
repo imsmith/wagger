@@ -105,13 +105,13 @@ defmodule Wagger.Generator.CloudflareTest do
   describe "generate/3 full pipeline" do
     test "generates valid JSON array" do
       assert {:ok, output} = Generator.generate(Cloudflare, @routes, @config)
-      assert {:ok, parsed} = Jason.decode(output)
+      assert {:ok, parsed} = Jason.decode(extract_json(output))
       assert is_list(parsed)
     end
 
     test "JSON output contains block rule" do
       assert {:ok, output} = Generator.generate(Cloudflare, @routes, @config)
-      assert {:ok, rules} = Jason.decode(output)
+      assert {:ok, rules} = Jason.decode(extract_json(output))
       block_rule = Enum.find(rules, &(&1["action"] == "block"))
       assert block_rule != nil
     end
@@ -123,7 +123,7 @@ defmodule Wagger.Generator.CloudflareTest do
 
     test "JSON output contains managed_challenge rule with ratelimit" do
       assert {:ok, output} = Generator.generate(Cloudflare, @routes, @config)
-      assert {:ok, rules} = Jason.decode(output)
+      assert {:ok, rules} = Jason.decode(extract_json(output))
       rl_rule = Enum.find(rules, &(&1["action"] == "managed_challenge"))
 
       assert rl_rule != nil
@@ -134,7 +134,7 @@ defmodule Wagger.Generator.CloudflareTest do
 
     test "JSON output uses correct expression types for each path" do
       assert {:ok, output} = Generator.generate(Cloudflare, @routes, @config)
-      assert {:ok, rules} = Jason.decode(output)
+      assert {:ok, rules} = Jason.decode(extract_json(output))
       block_rule = Enum.find(rules, &(&1["action"] == "block"))
       expr = block_rule["expression"]
 
@@ -151,5 +151,14 @@ defmodule Wagger.Generator.CloudflareTest do
       assert {:ok, parsed} = ExYang.parse(yang_source)
       assert {:ok, _resolved} = ExYang.resolve(parsed, %{})
     end
+  end
+
+  # Strip comment block to get at the JSON
+  defp extract_json(output) do
+    output
+    |> String.split("\n")
+    |> Enum.drop_while(&String.starts_with?(&1, "#"))
+    |> Enum.join("\n")
+    |> String.trim()
   end
 end
