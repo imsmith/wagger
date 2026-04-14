@@ -1,4 +1,5 @@
 defmodule WaggerWeb.Router do
+  @moduledoc false
   use WaggerWeb, :router
 
   pipeline :browser do
@@ -12,6 +13,8 @@ defmodule WaggerWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug WaggerWeb.Plugs.ApiVersion
+    plug WaggerWeb.Plugs.Authenticate
   end
 
   scope "/", WaggerWeb do
@@ -20,8 +23,10 @@ defmodule WaggerWeb.Router do
     get "/", PageController, :home
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", WaggerWeb do
-  #   pipe_through :api
-  # end
+  scope "/api", WaggerWeb do
+    pipe_through :api
+    resources "/applications", ApplicationController, except: [:new, :edit] do
+      resources "/routes", RouteController, except: [:new, :edit]
+    end
+  end
 end
