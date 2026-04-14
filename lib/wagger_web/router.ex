@@ -12,7 +12,7 @@ defmodule WaggerWeb.Router do
   end
 
   pipeline :api do
-    plug :accepts, ["json"]
+    plug :accepts, ["json", "edn"]
     plug WaggerWeb.Plugs.ApiVersion
     plug WaggerWeb.Plugs.Authenticate
   end
@@ -28,5 +28,7 @@ defmodule WaggerWeb.Router do
     resources "/applications", ApplicationController, except: [:new, :edit] do
       resources "/routes", RouteController, except: [:new, :edit]
     end
+
+    get "/applications/:application_id/export", ExportController, :show
   end
 end
