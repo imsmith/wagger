@@ -91,7 +91,7 @@
   --noise: 0;
 }
 
-/* Tokyo Night custom semantic tokens (not covered by DaisyUI) */
+/* Custom semantic tokens (not covered by DaisyUI) — dark (Tokyo Night) */
 :root[data-theme="dark"],
 :root:not([data-theme]) {
   --tn-text-muted: oklch(44% 0.04 260);
@@ -102,6 +102,18 @@
   --tn-method-delete: #f7768e;
   --tn-method-other: #565f89;
   --tn-param: #bb9af7;
+}
+
+/* Custom semantic tokens — light */
+:root[data-theme="light"] {
+  --tn-text-muted: oklch(55% 0.02 260);
+  --tn-border-subtle: oklch(88% 0.01 260);
+  --tn-method-get: #4d7c0f;
+  --tn-method-post: #2563eb;
+  --tn-method-put: #b45309;
+  --tn-method-delete: #dc2626;
+  --tn-method-other: #6b7280;
+  --tn-param: #7c3aed;
 }
 
 /* Add variants based on LiveView classes */
