@@ -36,5 +36,7 @@ defmodule WaggerWeb.Router do
     post "/applications/:application_id/import/openapi", ImportController, :openapi
     post "/applications/:application_id/import/accesslog", ImportController, :accesslog
     post "/applications/:application_id/import/confirm", ImportController, :confirm
+
+    post "/applications/:application_id/generate/:provider", GenerateController, :create
   end
 end
