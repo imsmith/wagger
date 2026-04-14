@@ -25,10 +25,16 @@ defmodule WaggerWeb.Router do
 
   scope "/api", WaggerWeb do
     pipe_through :api
+
     resources "/applications", ApplicationController, except: [:new, :edit] do
       resources "/routes", RouteController, except: [:new, :edit]
     end
 
     get "/applications/:application_id/export", ExportController, :show
+
+    post "/applications/:application_id/import/bulk", ImportController, :bulk
+    post "/applications/:application_id/import/openapi", ImportController, :openapi
+    post "/applications/:application_id/import/accesslog", ImportController, :accesslog
+    post "/applications/:application_id/import/confirm", ImportController, :confirm
   end
 end
