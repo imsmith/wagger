@@ -46,8 +46,7 @@ defmodule WaggerWeb.AppDetailLive do
         snapshots: snapshots,
         show_output: show_output,
         show_import: false,
-        show_new_provider: false,
-        selected_new_provider: nil,
+        all_providers: @providers,
         active_nav: nil
       )
 
@@ -96,27 +95,10 @@ defmodule WaggerWeb.AppDetailLive do
   }
 
   @impl true
-  def handle_event("toggle_new_provider", _, socket) do
-    {:noreply, assign(socket, :show_new_provider, !socket.assigns[:show_new_provider])}
-  end
-
-  @impl true
-  def handle_event("select_new_provider", %{"provider" => provider}, socket) do
-    {:noreply, assign(socket, :selected_new_provider, provider)}
-  end
-
-  @impl true
-  def handle_event("generate_new", params, socket) do
-    provider = params["provider"]
-    config = Map.drop(params, ["provider", "_target"])
-
-    if provider == "" or is_nil(Map.get(@provider_modules, provider)) do
-      {:noreply, put_flash(socket, :error, "Select a provider")}
-    else
-      # Delegate to the same regenerate logic
-      socket = assign(socket, :snapshots, Map.put(socket.assigns.snapshots, provider, nil))
-      handle_event("regenerate", %{"provider" => provider, "config_override" => config}, socket)
-    end
+  def handle_event("quick_generate", %{"provider" => provider}, socket) do
+    # Use default config for the provider, with app name as prefix
+    default_config = default_config_for(provider, socket.assigns.app.name)
+    handle_event("regenerate", %{"provider" => provider, "config_override" => default_config}, socket)
   end
 
   @impl true
@@ -237,6 +219,14 @@ defmodule WaggerWeb.AppDetailLive do
     removed = length(changes.removed)
     "+#{added} added, -#{removed} removed"
   end
+
+  defp default_config_for(provider, app_name) when provider in ~w(nginx caddy) do
+    %{"prefix" => app_name, "upstream" => "http://upstream:8080"}
+  end
+
+  defp default_config_for("aws", app_name), do: %{"prefix" => app_name, "scope" => "REGIONAL"}
+  defp default_config_for("azure", app_name), do: %{"prefix" => app_name, "mode" => "Prevention"}
+  defp default_config_for(_provider, app_name), do: %{"prefix" => app_name}
 
   def unconfigured_providers(drifts) do
     Enum.filter(@providers, fn provider ->

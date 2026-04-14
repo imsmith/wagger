@@ -69,11 +69,37 @@
     drift && drift.status != :never_generated
   end) %>
 
-  <%= if configured != [] do %>
-    <div class="space-y-2">
-      <div class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)] mb-2">
+  <div class="space-y-2">
+    <div class="flex items-center gap-3 mb-2">
+      <span class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)]">
         Provider Configs
-      </div>
+      </span>
+      <%= for provider <- @all_providers do %>
+        <% drift = Map.get(@drifts, provider) %>
+        <% has_snapshot = drift && drift.status != :never_generated %>
+        <%= if has_snapshot do %>
+          <button
+            phx-click="toggle_provider"
+            phx-value-provider={provider}
+            class={[
+              "text-xs px-2 py-0.5 rounded font-semibold cursor-pointer",
+              drift.status == :drifted && "bg-warning text-base-100",
+              drift.status != :drifted && "bg-base-300 text-success border border-success"
+            ]}
+          >
+            <%= String.capitalize(provider) %>
+          </button>
+        <% else %>
+          <button
+            phx-click="quick_generate"
+            phx-value-provider={provider}
+            class="text-xs px-2 py-0.5 rounded text-[color:var(--tn-text-muted)] border border-neutral opacity-40 hover:opacity-80 hover:border-primary hover:text-primary cursor-pointer transition-all"
+          >
+            + <%= String.capitalize(provider) %>
+          </button>
+        <% end %>
+      <% end %>
+    </div>
 
       <%= for provider <- configured do %>
         <% drift = Map.get(@drifts, provider) %>
@@ -164,70 +190,7 @@
           <% end %>
         </div>
       <% end %>
-    </div>
-  <% end %>
-
-  <%!-- Generate for new provider --%>
-  <% unconfigured = unconfigured_providers(@drifts) %>
-  <%= if unconfigured != [] do %>
-    <div class="rounded-lg border border-neutral overflow-hidden">
-      <button
-        class="w-full flex items-center justify-between px-4 py-3 bg-base-300 hover:bg-base-200 transition-colors cursor-pointer text-left"
-        phx-click="toggle_new_provider"
-      >
-        <span class="text-sm text-primary">
-          Generate for new provider...
-        </span>
-        <span class="text-xs text-[color:var(--tn-text-muted)]">
-          <%= if @show_new_provider, do: "▲", else: "▼" %>
-        </span>
-      </button>
-
-      <%= if @show_new_provider do %>
-        <div class="px-4 py-3 bg-base-200 border-t border-neutral">
-          <form phx-submit="generate_new" class="space-y-3">
-            <div>
-              <label class="text-xs text-[color:var(--tn-text-muted)] block mb-1">Provider</label>
-              <select
-                name="provider"
-                id="new-provider-select"
-                class="select select-bordered select-sm bg-base-100 text-base-content font-mono w-full max-w-xs"
-                phx-change="select_new_provider"
-              >
-                <option value="">Select a provider...</option>
-                <%= for p <- unconfigured do %>
-                  <option value={p} selected={@selected_new_provider == p}><%= String.capitalize(p) %></option>
-                <% end %>
-              </select>
-            </div>
-
-            <%= if @selected_new_provider && @selected_new_provider != "" do %>
-              <div class="flex gap-4 flex-wrap">
-                <%= for {field, label} <- config_fields_for(@selected_new_provider) do %>
-                  <div>
-                    <label class="text-xs text-[color:var(--tn-text-muted)] block mb-1"><%= label %></label>
-                    <input
-                      name={field}
-                      type="text"
-                      placeholder={field}
-                      class="bg-base-100 border border-neutral rounded px-2 py-1.5 text-sm text-base-content font-mono focus:border-primary focus:outline-none"
-                    />
-                  </div>
-                <% end %>
-              </div>
-
-              <button
-                type="submit"
-                class="bg-primary text-primary-content px-4 py-1.5 rounded text-xs font-bold hover:opacity-90"
-              >
-                Generate <%= String.capitalize(@selected_new_provider) %> Config
-              </button>
-            <% end %>
-          </form>
-        </div>
-      <% end %>
-    </div>
-  <% end %>
+  </div>
 
   <%!-- Import section --%>
   <div class="rounded-lg border border-neutral overflow-hidden">
