@@ -60,8 +60,11 @@ defmodule Wagger.Accounts do
   def get_user!(id), do: Repo.get!(User, id)
 
   @doc """
-  Deletes a user. Returns `{:ok, user}` or `{:error, changeset}`.
+  Deletes a user. Returns `{:ok, user}` or `{:error, :protected}` for the
+  admin user, or `{:error, changeset}` on failure.
   """
+  def delete_user(%User{username: "admin"}), do: {:error, :protected}
+
   def delete_user(%User{} = user) do
     Repo.delete(user)
   end

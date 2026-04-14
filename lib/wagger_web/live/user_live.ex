@@ -49,11 +49,12 @@ defmodule WaggerWeb.UserLive do
   def handle_event("delete_user", %{"id" => id}, socket) do
     user = Accounts.get_user!(id)
 
-    if user.username == "admin" do
-      {:noreply, put_flash(socket, :error, "Cannot delete the admin user")}
-    else
-      {:ok, _} = Accounts.delete_user(user)
-      {:noreply, assign(socket, :users, Accounts.list_users())}
+    case Accounts.delete_user(user) do
+      {:ok, _} ->
+        {:noreply, assign(socket, :users, Accounts.list_users())}
+
+      {:error, :protected} ->
+        {:noreply, put_flash(socket, :error, "Cannot delete the admin user")}
     end
   end
 end
