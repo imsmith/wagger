@@ -1,0 +1,89 @@
+module wagger-cloudflare {
+  namespace "urn:wagger:cloudflare";
+  prefix wcf;
+
+  organization "Wagger Project";
+  description "Data model for Cloudflare firewall rules WAF configuration.";
+
+  revision 2026-04-13 {
+    description "Initial revision.";
+  }
+
+  container cloudflare-config {
+    description "Top-level Cloudflare firewall rules configuration.";
+
+    leaf config-name {
+      type string;
+      mandatory true;
+      description "Name prefix used in rule descriptions.";
+    }
+
+    leaf generated-at {
+      type string;
+      description "ISO 8601 timestamp of generation.";
+    }
+
+    list rules {
+      key "description";
+      description "Ordered list of Cloudflare firewall rules.";
+
+      leaf description {
+        type string;
+        mandatory true;
+        description "Human-readable rule description.";
+      }
+
+      leaf expression {
+        type string;
+        mandatory true;
+        description "Cloudflare Ruleset Engine expression.";
+      }
+
+      leaf action {
+        type enumeration {
+          enum "block";
+          enum "managed_challenge";
+          enum "challenge";
+          enum "js_challenge";
+          enum "log";
+          enum "skip";
+        }
+        mandatory true;
+        description "Action to take when the expression matches.";
+      }
+
+      leaf enabled {
+        type boolean;
+        mandatory true;
+        description "Whether the rule is active.";
+      }
+
+      container ratelimit {
+        description "Rate limiting configuration (only for managed_challenge/challenge actions).";
+
+        leaf period {
+          type uint32;
+          mandatory true;
+          description "Rate limit counting period in seconds.";
+        }
+
+        leaf requests_per_period {
+          type uint32;
+          mandatory true;
+          description "Maximum requests allowed within the period.";
+        }
+
+        leaf mitigation_timeout {
+          type uint32;
+          mandatory true;
+          description "Duration in seconds to block after limit is exceeded.";
+        }
+
+        leaf-list characteristics {
+          type string;
+          description "Fields used to identify the requestor (e.g. ip.src).";
+        }
+      }
+    }
+  }
+}
