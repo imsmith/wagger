@@ -1,0 +1,47 @@
+module wagger-common {
+  namespace "urn:wagger:common";
+  prefix wc;
+
+  organization "Wagger Project";
+  description "Shared types for WAF configuration generators.";
+
+  revision 2026-04-13 {
+    description "Initial revision.";
+  }
+
+  typedef http-method {
+    type enumeration {
+      enum "GET";
+      enum "POST";
+      enum "PUT";
+      enum "PATCH";
+      enum "DELETE";
+      enum "HEAD";
+      enum "OPTIONS";
+    }
+    description "Standard HTTP methods.";
+  }
+
+  typedef path-type {
+    type enumeration {
+      enum "exact";
+      enum "prefix";
+      enum "regex";
+    }
+    description "How a route path should be matched.";
+  }
+
+  typedef rate-limit {
+    type uint32 {
+      range "1..1000000";
+    }
+    description "Requests per minute rate limit.";
+  }
+
+  typedef path-pattern {
+    type string {
+      length "1..4096";
+    }
+    description "A URL path pattern with optional {param} placeholders.";
+  }
+}
