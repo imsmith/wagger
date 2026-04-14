@@ -1,0 +1,113 @@
+<%!-- Dashboard: WAF config drift status across all app-provider pairs --%>
+
+<div class="space-y-6">
+  <%!-- Status summary bar --%>
+  <section>
+    <h1 class="text-lg font-semibold mb-3 text-[color:var(--tn-text-default)]">WAF Config Status</h1>
+
+    <% counts = status_counts(@drift_data) %>
+
+    <div class="flex flex-wrap gap-4">
+      <.status_card
+        count={counts.drifted}
+        label="Drifted"
+        status={:drifted}
+        selected={@status_filter == :drifted}
+        dimmed={@status_filter != nil and @status_filter != :drifted}
+      />
+      <.status_card
+        count={counts.current}
+        label="Current"
+        status={:current}
+        selected={@status_filter == :current}
+        dimmed={@status_filter != nil and @status_filter != :current}
+      />
+      <.status_card
+        count={counts.never_generated}
+        label="Never Generated"
+        status={:never_generated}
+        selected={@status_filter == :never_generated}
+        dimmed={@status_filter != nil and @status_filter != :never_generated}
+      />
+    </div>
+  </section>
+
+  <%!-- App cards area --%>
+  <section>
+    <%= if is_nil(@status_filter) do %>
+      <p class="text-center text-[color:var(--tn-text-muted)] py-12 text-sm">
+        Click a status above to see affected applications
+      </p>
+    <% else %>
+      <% visible_apps = filtered_apps(@apps, @drift_data, @status_filter) %>
+
+      <%= if visible_apps == [] do %>
+        <p class="text-center text-[color:var(--tn-text-muted)] py-12 text-sm">
+          No applications in this state.
+        </p>
+      <% else %>
+        <div class="space-y-3">
+          <%= for app <- visible_apps do %>
+            <% provider_drifts = app_provider_drifts(@drift_data, app.id) %>
+            <% border_class = app_card_border_class(provider_drifts) %>
+
+            <div
+              class={["bg-base-200 rounded-lg p-4", border_class]}
+              data-app-id={app.id}
+            >
+              <div class="flex flex-wrap items-start justify-between gap-2">
+                <%!-- App name + meta --%>
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center gap-3">
+                    <.link
+                      navigate={~p"/applications/#{app.id}"}
+                      class="text-base font-semibold text-[color:var(--tn-text-default)] hover:text-primary"
+                    >
+                      <%= app.name %>
+                    </.link>
+
+                    <span class="text-xs text-[color:var(--tn-text-muted)]">
+                      <%= route_count(app) %> routes
+                    </span>
+                  </div>
+
+                  <%= if app.tags && app.tags != [] do %>
+                    <div class="flex flex-wrap gap-1 mt-0.5">
+                      <%= for tag <- app.tags do %>
+                        <span class="px-1.5 py-0.5 rounded text-[10px] bg-base-300 text-[color:var(--tn-text-muted)] font-mono">
+                          <%= tag %>
+                        </span>
+                      <% end %>
+                    </div>
+                  <% end %>
+                </div>
+
+                <%!-- Provider badges --%>
+                <div class="flex flex-wrap gap-1.5">
+                  <%= for {provider, drift} <- provider_drifts do %>
+                    <%= if drift.status == @status_filter do %>
+                      <.provider_badge
+                        provider={provider}
+                        status={drift.status}
+                        summary={drift_summary(drift)}
+                      />
+                    <% else %>
+                      <%= if drift.status != :never_generated do %>
+                        <.provider_badge
+                          provider={provider}
+                          status={drift.status}
+                          summary={drift_summary(drift)}
+                          dimmed={true}
+                        />
+                      <% end %>
+                    <% end %>
+                  <% end %>
+                </div>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    <% end %>
+  </section>
+</div>
