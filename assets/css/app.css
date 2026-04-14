@@ -92,7 +92,8 @@
 }
 
 /* Tokyo Night custom semantic tokens (not covered by DaisyUI) */
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+:root:not([data-theme]) {
   --tn-text-muted: oklch(44% 0.04 260);
   --tn-border-subtle: oklch(28% 0.02 258);
   --tn-method-get: #9ece6a;
