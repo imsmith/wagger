@@ -295,6 +295,7 @@ defmodule WaggerWeb.AppDetailLive do
   # Path formatting
   # ---------------------------------------------------------------------------
 
+  @doc "Splits a path into `{type, segment}` tuples, highlighting `{param}` placeholders."
   def format_path(path) when is_binary(path) do
     path
     |> String.split(~r/(\{[^}]+\})/, include_captures: true, trim: false)
@@ -310,6 +311,7 @@ defmodule WaggerWeb.AppDetailLive do
   # Provider helpers
   # ---------------------------------------------------------------------------
 
+  @doc "Returns the Tailwind background class for a method's treemap dot indicator."
   def method_dot_color("GET"), do: "bg-[var(--tn-method-get)]"
   def method_dot_color("POST"), do: "bg-[var(--tn-method-post)]"
   def method_dot_color("PUT"), do: "bg-[var(--tn-method-put)]"
@@ -317,6 +319,7 @@ defmodule WaggerWeb.AppDetailLive do
   def method_dot_color("DELETE"), do: "bg-[var(--tn-method-delete)]"
   def method_dot_color(_), do: "bg-[var(--tn-method-other)]"
 
+  @doc "Returns a brief drift summary string for provider badges."
   def drift_summary(%Drift{status: :never_generated}), do: nil
   def drift_summary(%Drift{status: :current}), do: "current"
   def drift_summary(%Drift{status: :drifted, changes: changes}) do
@@ -332,6 +335,7 @@ defmodule WaggerWeb.AppDetailLive do
   defp default_config_for("azure", app_name), do: %{"prefix" => app_name, "mode" => "Prevention"}
   defp default_config_for(_provider, app_name), do: %{"prefix" => app_name}
 
+  @doc "Returns providers that have never been generated for this app."
   def unconfigured_providers(drifts) do
     Enum.filter(@providers, fn provider ->
       drift = Map.get(drifts, provider)
@@ -339,6 +343,7 @@ defmodule WaggerWeb.AppDetailLive do
     end)
   end
 
+  @doc "Returns the config field definitions for a provider."
   def config_fields_for(provider), do: Map.get(@provider_config_fields, provider, [])
 
   defp load_latest_snapshots(app) do

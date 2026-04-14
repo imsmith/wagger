@@ -244,6 +244,7 @@ defmodule WaggerWeb.DashboardLive do
   # Private
   # ---------------------------------------------------------------------------
 
+  @doc "Returns placeholder text for the import textarea based on the selected mode."
   def input_placeholder("openapi"), do: "Paste OpenAPI 3.x JSON spec..."
   def input_placeholder("bulk"), do: "GET /api/users\nGET,POST /api/items - Item CRUD\n/health"
   def input_placeholder("accesslog"), do: "Paste nginx/apache/caddy access log lines..."
