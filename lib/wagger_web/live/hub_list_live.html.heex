@@ -1,0 +1,48 @@
+<div class="space-y-6">
+  <div>
+    <h1 class="text-xl font-bold text-base-content">Hub</h1>
+    <p class="text-sm text-[color:var(--tn-text-muted)] mt-1">Published API definitions available for WAF config generation.</p>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="table table-sm w-full">
+      <thead>
+        <tr class="text-[color:var(--tn-text-muted)] text-xs uppercase tracking-wide border-b border-neutral">
+          <th class="bg-base-100 font-semibold">Name</th>
+          <th class="bg-base-100 font-semibold">Description</th>
+          <th class="bg-base-100 font-semibold text-right">Routes</th>
+          <th class="bg-base-100 font-semibold">Tags</th>
+        </tr>
+      </thead>
+      <tbody>
+        <%= for %{app: app, route_count: count} <- @apps do %>
+          <tr class="border-b border-neutral/40 hover:bg-base-200 transition-colors">
+            <td>
+              <.link navigate={~p"/hub/#{app.name}"} class="font-bold font-mono text-primary hover:underline">
+                <%= app.name %>
+              </.link>
+            </td>
+            <td class="text-base-content text-sm max-w-md truncate"><%= app.description %></td>
+            <td class="text-base-content font-mono text-right"><%= count %></td>
+            <td>
+              <%= if app.tags && app.tags != [] do %>
+                <div class="flex flex-wrap gap-1">
+                  <%= for tag <- app.tags do %>
+                    <span class="text-[10px] bg-base-300 border border-neutral px-1.5 py-0.5 rounded text-[color:var(--tn-text-muted)]"><%= tag %></span>
+                  <% end %>
+                </div>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+        <%= if @apps == [] do %>
+          <tr>
+            <td colspan="4" class="text-center text-[color:var(--tn-text-muted)] py-8 text-sm">
+              No published applications yet.
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</div>

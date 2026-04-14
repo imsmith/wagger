@@ -22,8 +22,14 @@ defmodule WaggerWeb.Router do
 
     live_session :default, on_mount: [{WaggerWeb.Hooks.NavHook, :default}] do
       live "/", DashboardLive, :index
+      live "/applications", AppListLive, :index
       live "/applications/:id", AppDetailLive, :show
       live "/users", UserLive, :index
+    end
+
+    live_session :hub, on_mount: [{WaggerWeb.Hooks.NavHook, :default}] do
+      live "/hub", HubListLive, :index
+      live "/hub/:name", HubDetailLive, :show
     end
   end
 

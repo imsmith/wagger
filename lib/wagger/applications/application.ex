@@ -19,6 +19,10 @@ defmodule Wagger.Applications.Application do
     field :name, :string
     field :description, :string
     field :tags, Wagger.Ecto.EdnList
+    field :source, :string
+    field :route_checksum, :string
+    field :public, :boolean, default: false
+    field :shareable, :boolean, default: false
 
     has_many :routes, Wagger.Applications.Route
 
@@ -36,7 +40,7 @@ defmodule Wagger.Applications.Application do
   """
   def changeset(application, attrs) do
     application
-    |> cast(attrs, [:name, :description, :tags])
+    |> cast(attrs, [:name, :description, :tags, :source, :route_checksum, :public, :shareable])
     |> validate_required([:name])
     |> validate_format(:name, ~r/^[a-z0-9][a-z0-9\-]*$/,
       message: "must be a lowercase slug (letters, digits, hyphens)"

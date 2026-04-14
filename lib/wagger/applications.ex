@@ -40,9 +40,28 @@ defmodule Wagger.Applications do
   defp apply_tag_filter(query, _filters), do: query
 
   @doc """
+  Returns all shareable applications (public and shareable both true).
+  """
+  def list_shareable_applications do
+    Application
+    |> where([a], a.public == true and a.shareable == true)
+    |> Repo.all()
+  end
+
+  @doc """
   Gets a single Application by ID. Raises `Ecto.NoResultsError` if not found.
   """
   def get_application!(id), do: Repo.get!(Application, id)
+
+  @doc """
+  Gets a shareable Application by name. Raises `Ecto.NoResultsError` if not found
+  or if the application is not shareable.
+  """
+  def get_shareable_application_by_name!(name) do
+    Application
+    |> where([a], a.name == ^name and a.public == true and a.shareable == true)
+    |> Repo.one!()
+  end
 
   @doc """
   Creates an Application with the given attributes.

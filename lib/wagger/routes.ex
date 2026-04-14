@@ -75,9 +75,15 @@ defmodule Wagger.Routes do
   Returns `{:ok, %Route{}}` on success or `{:error, %Ecto.Changeset{}}` on failure.
   """
   def create_route(%Application{} = app, attrs \\ %{}) do
-    %Route{application_id: app.id}
-    |> Route.changeset(attrs)
-    |> Repo.insert()
+    result =
+      %Route{application_id: app.id}
+      |> Route.changeset(attrs)
+      |> Repo.insert()
+
+    with {:ok, route} <- result do
+      update_route_checksum(app)
+      {:ok, route}
+    end
   end
 
   @doc """
@@ -86,9 +92,16 @@ defmodule Wagger.Routes do
   Returns `{:ok, %Route{}}` on success or `{:error, %Ecto.Changeset{}}` on failure.
   """
   def update_route(%Route{} = route, attrs) do
-    route
-    |> Route.changeset(attrs)
-    |> Repo.update()
+    result =
+      route
+      |> Route.changeset(attrs)
+      |> Repo.update()
+
+    with {:ok, updated} <- result do
+      app = Wagger.Applications.get_application!(updated.application_id)
+      update_route_checksum(app)
+      {:ok, updated}
+    end
   end
 
   @doc """
@@ -97,6 +110,19 @@ defmodule Wagger.Routes do
   Returns `{:ok, %Route{}}` on success or `{:error, %Ecto.Changeset{}}` on failure.
   """
   def delete_route(%Route{} = route) do
-    Repo.delete(route)
+    result = Repo.delete(route)
+
+    with {:ok, deleted} <- result do
+      app = Wagger.Applications.get_application!(deleted.application_id)
+      update_route_checksum(app)
+      {:ok, deleted}
+    end
+  end
+
+  defp update_route_checksum(%Application{} = app) do
+    routes = list_routes(app)
+    normalized = Wagger.Drift.normalize_for_snapshot(routes)
+    checksum = Wagger.Drift.compute_checksum(normalized)
+    Wagger.Applications.update_application(app, %{route_checksum: checksum})
   end
 end

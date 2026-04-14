@@ -1,15 +1,105 @@
 <div class="space-y-6">
-  <%!-- Header --%>
-  <div class="flex items-start justify-between">
-    <div>
-      <h1 class="text-2xl font-bold text-base-content"><%= @app.name %></h1>
-      <%= if @app.description do %>
-        <p class="text-sm text-[color:var(--tn-text-muted)] mt-1"><%= @app.description %></p>
+  <%!-- Header: name + toggles/tags on same line --%>
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-base-content"><%= @app.name %></h1>
+    <div class="flex items-center gap-4">
+      <%!-- Public toggle --%>
+      <div class="flex items-center gap-1.5">
+        <span class="text-[color:var(--tn-text-muted)] text-xs uppercase tracking-wide">Public</span>
+        <button
+          phx-click="toggle_app_field"
+          phx-value-field="public"
+          class="cursor-pointer inline-flex items-center"
+          aria-label={"Toggle public: currently #{if @app.public, do: "on", else: "off"}"}
+        >
+          <span class={"relative inline-block w-8 h-4 rounded-full transition-colors duration-200 #{if @app.public, do: "bg-success", else: "bg-error/40"}"}>
+            <span class={"absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 #{if @app.public, do: "translate-x-4", else: ""}"}></span>
+          </span>
+        </button>
+      </div>
+      <%!-- Shareable toggle --%>
+      <div class="flex items-center gap-1.5">
+        <span class="text-[color:var(--tn-text-muted)] text-xs uppercase tracking-wide">Shareable</span>
+        <button
+          phx-click="toggle_app_field"
+          phx-value-field="shareable"
+          class={"inline-flex items-center #{if @app.public, do: "cursor-pointer", else: "cursor-not-allowed opacity-40"}"}
+          aria-label={"Toggle shareable: currently #{if @app.shareable, do: "on", else: "off"}"}
+          disabled={!@app.public}
+        >
+          <span class={"relative inline-block w-8 h-4 rounded-full transition-colors duration-200 #{if @app.shareable, do: "bg-success", else: "bg-error/40"}"}>
+            <span class={"absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 #{if @app.shareable, do: "translate-x-4", else: ""}"}></span>
+          </span>
+        </button>
+      </div>
+      <%!-- Tags --%>
+      <%= if @app.tags && @app.tags != [] do %>
+        <div class="flex flex-wrap gap-1">
+          <%= for tag <- @app.tags do %>
+            <span class="text-[10px] bg-base-300 border border-neutral px-1.5 py-0.5 rounded text-[color:var(--tn-text-muted)]"><%= tag %></span>
+          <% end %>
+        </div>
       <% end %>
     </div>
-    <div class="text-right text-sm text-[color:var(--tn-text-muted)]">
-      <span class="font-semibold text-base-content"><%= length(@routes) %></span> routes
-    </div>
+  </div>
+
+  <%!-- Description --%>
+  <div class="-mt-4">
+    <%= if @editing_field == "description" do %>
+      <form phx-submit="save_field" class="flex items-center gap-1.5">
+        <input type="hidden" name="field" value="description" />
+        <input
+          type="text"
+          name="value"
+          value={@app.description}
+          autofocus
+          phx-keydown="cancel_field_edit"
+          phx-key="Escape"
+          class="input input-bordered input-xs bg-base-200 text-base-content font-mono flex-1"
+        />
+        <button type="submit" class="btn btn-xs btn-success btn-outline">save</button>
+        <button type="button" phx-click="cancel_field_edit" class="btn btn-xs btn-ghost">cancel</button>
+      </form>
+    <% else %>
+      <p
+        phx-click="edit_field"
+        phx-value-field="description"
+        class="text-sm text-[color:var(--tn-text-muted)] cursor-pointer hover:text-primary"
+        title="Click to edit"
+      ><%= @app.description || raw("&mdash;") %></p>
+    <% end %>
+  </div>
+
+  <%!-- Source / routes / checksum --%>
+  <div class="-mt-4 flex items-center gap-4 text-xs text-[color:var(--tn-text-muted)]">
+    <%= if @editing_field == "source" do %>
+      <form phx-submit="save_field" class="flex items-center gap-1.5">
+        <input type="hidden" name="field" value="source" />
+        <input
+          type="text"
+          name="value"
+          value={@app.source}
+          autofocus
+          phx-keydown="cancel_field_edit"
+          phx-key="Escape"
+          placeholder="file path or URL"
+          class="input input-bordered input-xs bg-base-200 text-base-content font-mono w-72"
+        />
+        <button type="submit" class="btn btn-xs btn-success btn-outline">save</button>
+        <button type="button" phx-click="cancel_field_edit" class="btn btn-xs btn-ghost">cancel</button>
+      </form>
+    <% else %>
+      <span
+        phx-click="edit_field"
+        phx-value-field="source"
+        class="cursor-pointer hover:text-primary font-mono"
+        title="Click to edit source"
+      ><%= @app.source || "no source" %></span>
+    <% end %>
+    <span class="text-neutral">|</span>
+    <span><%= length(@routes) %> routes</span>
+    <span class="text-neutral">|</span>
+    <span class="font-mono"><%= if @app.route_checksum, do: String.slice(@app.route_checksum, 0, 12) <> "...", else: "no checksum" %></span>
   </div>
 
   <%!-- Route treemap section --%>

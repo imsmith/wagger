@@ -49,10 +49,49 @@ defmodule WaggerWeb.AppDetailLive do
         show_output: MapSet.new(),
         show_import: false,
         all_providers: @providers,
-        active_nav: nil
+        active_nav: nil,
+        editing_field: nil
       )
 
     {:ok, socket}
+  end
+
+  # -- App metadata editing events --
+
+  @impl true
+  def handle_event("toggle_app_field", %{"field" => "public"}, socket) do
+    app = socket.assigns.app
+    attrs = if app.public, do: %{public: false, shareable: false}, else: %{public: true}
+    {:ok, app} = Applications.update_application(app, attrs)
+    {:noreply, assign(socket, :app, app)}
+  end
+
+  def handle_event("toggle_app_field", %{"field" => "shareable"}, socket) do
+    app = socket.assigns.app
+    if app.public do
+      {:ok, app} = Applications.update_application(app, %{shareable: !app.shareable})
+      {:noreply, assign(socket, :app, app)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("edit_field", %{"field" => field}, socket)
+      when field in ~w(description source) do
+    {:noreply, assign(socket, :editing_field, field)}
+  end
+
+  @impl true
+  def handle_event("save_field", %{"field" => field, "value" => value}, socket)
+      when field in ~w(description source) do
+    {:ok, app} = Applications.update_application(socket.assigns.app, %{field => value})
+    {:noreply, socket |> assign(:app, app) |> assign(:editing_field, nil)}
+  end
+
+  @impl true
+  def handle_event("cancel_field_edit", _params, socket) do
+    {:noreply, assign(socket, :editing_field, nil)}
   end
 
   # -- Treemap navigation events --

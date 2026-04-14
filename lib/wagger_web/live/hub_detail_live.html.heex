@@ -1,0 +1,226 @@
+<div class="space-y-6">
+  <%!-- Header --%>
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-base-content"><%= @app.name %></h1>
+    <%= if @app.tags && @app.tags != [] do %>
+      <div class="flex flex-wrap gap-1">
+        <%= for tag <- @app.tags do %>
+          <span class="text-[10px] bg-base-300 border border-neutral px-1.5 py-0.5 rounded text-[color:var(--tn-text-muted)]"><%= tag %></span>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+
+  <%= if @app.description do %>
+    <p class="-mt-4 text-sm text-[color:var(--tn-text-muted)]"><%= @app.description %></p>
+  <% end %>
+
+  <div class="-mt-4 flex items-center gap-4 text-xs text-[color:var(--tn-text-muted)]">
+    <%= if @app.source do %>
+      <span class="font-mono"><%= @app.source %></span>
+      <span class="text-neutral">|</span>
+    <% end %>
+    <span><%= length(@routes) %> routes</span>
+    <%= if @app.route_checksum do %>
+      <span class="text-neutral">|</span>
+      <span class="font-mono"><%= String.slice(@app.route_checksum, 0, 12) %>...</span>
+    <% end %>
+  </div>
+
+  <%!-- Route treemap section --%>
+  <div>
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)]">
+        Routes
+      </div>
+      <form phx-change="search_routes" class="flex items-center">
+        <input
+          name="query"
+          type="text"
+          value={@search_query}
+          placeholder="Search routes..."
+          phx-debounce="200"
+          class="bg-base-200 border border-neutral rounded px-2 py-1 text-xs font-mono text-base-content focus:border-primary focus:outline-none w-64"
+        />
+      </form>
+    </div>
+
+    <%!-- Search results --%>
+    <%= if @search_results do %>
+      <div class="bg-base-200 rounded-lg border border-neutral p-3 mb-4">
+        <div class="text-xs text-[color:var(--tn-text-muted)] mb-2">
+          <%= length(@search_results) %> results for "<%= @search_query %>"
+        </div>
+        <div class="space-y-0.5 max-h-80 overflow-y-auto">
+          <%= for row <- @search_results do %>
+            <div class="flex items-center gap-2.5 py-1 text-sm">
+              <.method_pill method={row.method} />
+              <span class="font-mono text-base-content"><%= for {type, segment} <- row.path_parts do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= segment %></span><% else %><%= segment %><% end %><% end %></span>
+              <%= if row.description do %>
+                <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto"><%= row.description %></span>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      </div>
+
+    <% else %>
+      <%!-- Breadcrumb navigation --%>
+      <% current = current_subtree(@route_tree, @treemap_path) %>
+
+      <%= if @treemap_path != [] do %>
+        <div class="flex items-center gap-1.5 mb-3 text-xs font-mono">
+          <button phx-click="treemap_back" phx-value-depth="0" class="text-primary hover:underline cursor-pointer">
+            /
+          </button>
+          <%= for {segment, idx} <- Enum.with_index(@treemap_path) do %>
+            <span class="text-[color:var(--tn-text-muted)]">/</span>
+            <%= if idx < length(@treemap_path) - 1 do %>
+              <button phx-click="treemap_back" phx-value-depth={idx + 1} class="text-primary hover:underline cursor-pointer">
+                <%= segment %>
+              </button>
+            <% else %>
+              <span class="text-base-content font-semibold"><%= segment %></span>
+            <% end %>
+          <% end %>
+          <span class="text-[color:var(--tn-text-muted)] ml-2">
+            (<%= current[:_count] || 0 %> endpoints)
+          </span>
+        </div>
+      <% end %>
+
+      <%!-- Treemap or leaf view --%>
+      <% children = tree_children(current) %>
+
+      <%= if children != [] do %>
+        <div class="flex flex-wrap gap-1.5" style="min-height: 200px;">
+          <%= for {segment, child} <- children do %>
+            <% count = child[:_count] || 0 %>
+            <% total = current[:_count] || 1 %>
+            <% pct = max(8, trunc(count / total * 100)) %>
+            <% is_leaf = leaf_node?(child) %>
+            <button
+              phx-click="treemap_drill"
+              phx-value-segment={segment}
+              class={"rounded-lg p-3 cursor-pointer transition-all text-left flex flex-col justify-between #{treemap_cell_class(segment)}"}
+              style={"flex: #{count} 1 #{pct}%; min-width: 80px; min-height: 80px;"}
+            >
+              <div>
+                <div class="text-sm font-semibold text-base-content truncate">
+                  <%= if is_leaf do %>
+                    <span class="text-secondary"><%= segment %></span>
+                  <% else %>
+                    <span class="text-primary"><%= segment %></span>
+                  <% end %>
+                </div>
+                <div class="text-[10px] text-[color:var(--tn-text-muted)] mt-0.5">
+                  <%= count %> endpoint<%= if count != 1, do: "s" %>
+                </div>
+              </div>
+              <%= if is_leaf do %>
+                <div class="flex gap-1 flex-wrap mt-2">
+                  <%= for route <- Map.get(child, :_routes, []) do %>
+                    <%= for m <- route.methods do %>
+                      <span class={"inline-block w-1.5 h-1.5 rounded-full #{method_dot_color(m)}"}></span>
+                    <% end %>
+                  <% end %>
+                </div>
+              <% end %>
+            </button>
+          <% end %>
+        </div>
+
+        <% own_routes = Map.get(current, :_routes, []) %>
+        <%= if own_routes != [] do %>
+          <div class="mt-3 bg-base-200 rounded-lg border border-neutral overflow-hidden">
+            <div class="space-y-0">
+              <%= for row <- leaf_routes(%{_routes: own_routes, _count: 0}) do %>
+                <div class="flex items-center gap-2.5 px-4 py-2 border-b border-base-100 last:border-b-0 text-sm">
+                  <div class="flex-shrink-0 w-16">
+                    <.method_pill method={row.method} />
+                  </div>
+                  <span class="font-mono text-base-content"><%= for {type, seg} <- row.path_parts do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= seg %></span><% else %><%= seg %><% end %><% end %></span>
+                  <%= if row.description do %>
+                    <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto truncate max-w-md"><%= row.description %></span>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+
+      <% else %>
+        <div class="bg-base-200 rounded-lg border border-neutral overflow-hidden">
+          <div class="space-y-0">
+            <%= for row <- leaf_routes(current) do %>
+              <div class="flex items-center gap-2.5 px-4 py-2 border-b border-base-100 last:border-b-0 text-sm">
+                <div class="flex-shrink-0 w-16">
+                  <.method_pill method={row.method} />
+                </div>
+                <span class="font-mono text-base-content"><%= for {type, seg} <- row.path_parts do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= seg %></span><% else %><%= seg %><% end %><% end %></span>
+                <%= if row.rate_limit do %>
+                  <span class="flex-shrink-0 text-[10px] bg-base-300 border border-neutral px-1.5 py-0.5 rounded text-[color:var(--tn-text-muted)]"><%= row.rate_limit %>/min</span>
+                <% end %>
+                <%= if row.description do %>
+                  <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto truncate max-w-md"><%= row.description %></span>
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    <% end %>
+  </div>
+
+  <%!-- Generate panel --%>
+  <div>
+    <div class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)] mb-3">
+      Generate Config
+    </div>
+
+    <div class="flex flex-wrap gap-1.5 mb-4">
+      <%= for provider <- @all_providers do %>
+        <button
+          phx-click="select_provider"
+          phx-value-provider={provider}
+          class={"text-xs px-3 py-1.5 rounded cursor-pointer transition-colors border #{if @selected_provider == provider, do: "bg-primary text-primary-content border-primary", else: "text-base-content border-neutral hover:border-primary"}"}
+        >
+          <%= String.capitalize(provider) %>
+        </button>
+      <% end %>
+    </div>
+
+    <%= if @selected_provider do %>
+      <form phx-submit="generate" class="space-y-3">
+        <div class="flex flex-wrap gap-3 items-end">
+          <%= for {field, label} <- config_fields_for(@selected_provider) do %>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-[color:var(--tn-text-muted)] uppercase tracking-wide"><%= label %></label>
+              <input
+                type="text"
+                name={field}
+                value={if field == "prefix", do: @app.name, else: ""}
+                class="input input-bordered input-sm bg-base-200 text-base-content font-mono w-48"
+              />
+            </div>
+          <% end %>
+          <button type="submit" class="btn btn-primary btn-sm">
+            Generate
+          </button>
+        </div>
+      </form>
+
+      <%= if @generated_output do %>
+        <div class="relative mt-4">
+          <button
+            phx-click={Phoenix.LiveView.JS.dispatch("wagger:copy", to: "#hub-output")}
+            class="absolute top-2 right-2 text-xs text-[color:var(--tn-text-muted)] hover:text-base-content bg-base-200 border border-neutral px-2 py-0.5 rounded cursor-pointer z-10"
+          >
+            Copy
+          </button>
+          <pre id="hub-output" class="p-3 bg-base-100 border border-neutral rounded text-xs max-h-96 overflow-y-auto whitespace-pre-wrap break-all"><code><%= @generated_output %></code></pre>
+        </div>
+      <% end %>
+    <% end %>
+  </div>
+</div>
