@@ -81,6 +81,7 @@ defmodule WaggerWeb do
       import Phoenix.HTML
       # Core UI components
       import WaggerWeb.CoreComponents
+      import WaggerWeb.WaggerComponents
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS
