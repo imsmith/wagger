@@ -37,15 +37,7 @@
           </div>
 
           <%!-- Path with param highlighting --%>
-          <div class="flex-1 font-mono text-sm">
-            <%= for {type, segment} <- row.path_parts do %>
-              <%= if type == "param" do %>
-                <span class="text-secondary font-semibold"><%= segment %></span>
-              <% else %>
-                <span class="text-base-content"><%= segment %></span>
-              <% end %>
-            <% end %>
-          </div>
+          <div class="flex-1 font-mono text-sm"><%= for {type, segment} <- row.path_parts do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= segment %></span><% else %><span class="text-base-content"><%= segment %></span><% end %><% end %></div>
 
           <%!-- Rate limit pill --%>
           <%= if row.rate_limit do %>
