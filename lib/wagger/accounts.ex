@@ -48,6 +48,25 @@ defmodule Wagger.Accounts do
   end
 
   @doc """
+  Returns all users ordered by insertion time.
+  """
+  def list_users do
+    Repo.all(User)
+  end
+
+  @doc """
+  Returns a user by id, raising if not found.
+  """
+  def get_user!(id), do: Repo.get!(User, id)
+
+  @doc """
+  Deletes a user. Returns `{:ok, user}` or `{:error, changeset}`.
+  """
+  def delete_user(%User{} = user) do
+    Repo.delete(user)
+  end
+
+  @doc """
   Returns `true` if no users exist in the database, `false` otherwise.
 
   Used to detect whether initial setup is required.
