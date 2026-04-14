@@ -28,18 +28,41 @@
           <% end %>
         </div>
 
-        <%!-- Input area --%>
-        <form phx-submit="preview_new_app" class="space-y-3">
+        <%!-- Input area: paste, drop, or browse --%>
+        <form id="new-app-form" phx-submit="preview_new_app" phx-change="validate_upload" class="space-y-3">
           <input type="hidden" name="name" value={@new_app_name} />
-          <textarea
-            name="input"
-            class="w-full h-40 bg-base-100 border border-neutral rounded p-3 text-xs font-mono text-base-content focus:border-primary focus:outline-none"
-            placeholder={input_placeholder(@new_app_import_mode)}
-            phx-debounce="500"
-          ><%= @new_app_input %></textarea>
-          <button type="submit" class="text-xs bg-base-200 text-base-content px-3 py-1 rounded border border-neutral hover:border-primary cursor-pointer">
-            Preview
-          </button>
+
+          <%!-- Drop zone + textarea --%>
+          <div
+            phx-drop-target={@uploads.spec_file.ref}
+            class="relative border-2 border-dashed border-neutral rounded-lg hover:border-primary transition-colors"
+          >
+            <textarea
+              name="input"
+              class="w-full h-40 bg-base-100 rounded-lg p-3 text-xs font-mono text-base-content focus:outline-none resize-none border-0"
+              placeholder={input_placeholder(@new_app_import_mode)}
+            ><%= @new_app_input %></textarea>
+
+            <%!-- File upload indicator --%>
+            <div class="absolute bottom-2 right-2 flex items-center gap-2">
+              <%= for entry <- @uploads.spec_file.entries do %>
+                <span class="text-xs text-primary bg-base-300 px-2 py-0.5 rounded">
+                  <%= entry.client_name %>
+                </span>
+              <% end %>
+              <label class="text-xs text-[color:var(--tn-text-muted)] hover:text-primary cursor-pointer">
+                <.live_file_input upload={@uploads.spec_file} class="hidden" />
+                browse
+              </label>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button type="submit" class="text-xs bg-base-200 text-base-content px-3 py-1 rounded border border-neutral hover:border-primary cursor-pointer">
+              Preview
+            </button>
+            <span class="text-xs text-[color:var(--tn-text-muted)]">paste, drop a file, or browse</span>
+          </div>
         </form>
 
         <%!-- Preview results --%>

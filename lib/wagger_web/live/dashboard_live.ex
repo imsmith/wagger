@@ -21,7 +21,8 @@ defmodule WaggerWeb.DashboardLive do
     drift_data = build_drift_data(apps)
 
     {:ok,
-     assign(socket,
+     socket
+     |> assign(
        apps: apps,
        drift_data: drift_data,
        status_filter: nil,
@@ -32,6 +33,12 @@ defmodule WaggerWeb.DashboardLive do
        new_app_preview: nil,
        page_title: "Dashboard",
        active_nav: :dashboard
+     )
+     |> allow_upload(:spec_file,
+       accept: ~w(.json .txt),
+       max_entries: 1,
+       max_file_size: 10_000_000,
+       auto_upload: true
      )}
   end
 
@@ -56,7 +63,26 @@ defmodule WaggerWeb.DashboardLive do
   end
 
   @impl true
-  def handle_event("preview_new_app", %{"input" => input, "name" => name}, socket) do
+  def handle_event("validate_upload", _params, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("preview_new_app", params, socket) do
+    # Check for uploaded file first, fall back to textarea input
+    {input, socket} =
+      case consume_uploaded_entries(socket, :spec_file, fn %{path: path}, _entry ->
+        {:ok, File.read!(path)}
+      end) do
+        [content | _] -> {content, socket}
+        [] -> {params["input"] || "", socket}
+      end
+
+    name = params["name"] || ""
+    do_preview(input, name, socket)
+  end
+
+  defp do_preview(input, name, socket) do
     mode = socket.assigns.new_app_import_mode
 
     {parsed, skipped, suggested_name} =
