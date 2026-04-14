@@ -11,7 +11,13 @@
         </.link>
       </div>
     </div>
-    <.theme_toggle />
+    <div class="flex items-center gap-4">
+      <.theme_toggle />
+      <.link navigate={~p"/users"} class="flex items-center gap-1.5 text-sm text-[color:var(--tn-text-muted)] hover:text-base-content">
+        <.icon name="hero-user-circle-mini" class="size-5" />
+        <span class="hidden sm:inline"><%= assigns[:current_username] || "admin" %></span>
+      </.link>
+    </div>
   </nav>
   <main class="p-4">
     <.flash_group flash={@flash} />
