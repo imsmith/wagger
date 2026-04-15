@@ -42,3 +42,6 @@ npm-debug.log
 # Encryption keys
 /priv/secrets/
 
+# Superpowers brainstorming scratch
+.superpowers/
+
