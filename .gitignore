@@ -42,6 +42,10 @@ npm-debug.log
 # Encryption keys
 /priv/secrets/
 
+# Environment files
+.env
+.env.*
+
 # Superpowers brainstorming scratch
 .superpowers/
 

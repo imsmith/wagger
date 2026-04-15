@@ -14,7 +14,7 @@ config :wagger, Wagger.Repo,
 # you can enable the server option below.
 config :wagger, WaggerWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
-  secret_key_base: "amsLQM/53bkIg51+71YoIvPpFXbzcspXwoE/GYw+tHUu8WZDq8OUiEyEjwDHgc9j",
+  secret_key_base: "WpfLP5MddRSG4UcUgiDJG9JfaG5a0FaobxYjczNerWVjta88X4I39DNV5gpYCCO/",
   server: false
 
 # Print only warnings and errors during test

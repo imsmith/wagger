@@ -20,7 +20,7 @@ config :wagger, WaggerWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "T5ZOc5iczZz0NQxo9xWgchLVfMhnKvJIi+YunyebcfcYWe7gDkiO/snaRimupgqP",
+  secret_key_base: "HNpktT1IZdb6ZGjXEo5svaS2reR2C1KQW7jJ/A0u28LswVG9IXID0ZsGsC6jTZ+6",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:wagger, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:wagger, ~w(--watch)]}
