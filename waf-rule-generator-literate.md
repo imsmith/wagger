@@ -1,6 +1,6 @@
-# WAF Rule Generator:  A Literate Program
+# Wagger:  A Literate Program
 
-*A provider-agnostic tool for defining application URL allowlists and generating Web Application Firewall configurations.*
+*A provider-agnostic route-to-policy compiler for Web Application Firewall configurations, written in Elixir.*
 
 ---
 
@@ -8,64 +8,57 @@
 
 Every web application has a finite set of valid endpoints.  A user registration API exposes `/api/v1/users` for `GET` and `POST`, maybe `/api/v1/users/{id}` for `GET`, `PUT`, and `DELETE`.  A static site serves files under `/static/`.  A health check lives at `/health`.  Everything else -- `/admin`, `/wp-login.php`, `/../../../etc/passwd` -- is noise at best and an attack at worst.
 
-A Web Application Firewall (WAF) should encode this knowledge:  block requests that do not match known routes, enforce method restrictions per route, and apply rate limits where appropriate.  But WAF configurations are deeply provider-specific.  AWS WAF uses nested JSON with byte match statements.  Cloudflare uses a bespoke expression language.  Azure Front Door has its own policy schema.  Nginx uses location blocks and `limit_except` directives.  Terraform wraps all of this in HCL.
+A Web Application Firewall (WAF) should encode this knowledge:  block requests that do not match known routes, enforce method restrictions per route, and apply rate limits where appropriate.  But WAF configurations are deeply provider-specific.  AWS WAF uses nested JSON with byte match statements.  Cloudflare uses a bespoke expression language.  Azure Front Door has its own policy schema.  Nginx uses location blocks and `limit_except` directives.  Coraza uses SecRule directives.  Each requires different structure, different escaping, different semantics for the same logical intent.
 
-The core insight of this tool is simple:  **the route definitions are the source of truth, and the WAF configurations are derived artifacts.**  Define routes once in a canonical, provider-agnostic format.  Generate WAF rules for any target platform mechanically.
+The core insight of this tool is simple:  **the route definitions are the source of truth, and the WAF configurations are derived artifacts.**  Define routes once in a canonical, provider-agnostic format.  Generate WAF rules for any target platform mechanically.  Detect when the two diverge.
 
 This document is that tool, written as a literate program.  The prose explains the design decisions.  The code blocks are the implementation.  Together, they form both the documentation and the software.
+
+The original version of this document was written in JavaScript.  This is the Elixir rewrite -- a Phoenix application called Wagger, with a persistent data model, a YANG-validated generation pipeline, drift detection, a public Hub for sharing API definitions, and integration with the Comn infrastructure library.
 
 
 ## The Canonical Route Schema
 
 Before we can generate anything, we need a data model.  What do we actually know about a route?
 
-At minimum:  a path and which HTTP methods it accepts.  But useful WAF rules need more.  We want to distinguish between exact path matches, prefix matches (like `/static/`), and regex patterns.  We want optional rate limits.  We want tags for grouping and filtering.  We might want to note required headers (like `Authorization`) and expected query parameters, though these are harder to enforce at the WAF layer and serve more as documentation.
+At minimum:  a path and which HTTP methods it accepts.  But useful WAF rules need more.  We want to distinguish between exact path matches, prefix matches (like `/static/`), and regex patterns.  We want optional rate limits.  We want tags for grouping and filtering.  We might want to note required headers and expected query parameters, though these are harder to enforce at the WAF layer and serve more as documentation.
 
-Here is the schema:
+Here is the Ecto schema:
 
-```javascript
-const DEFAULT_ROUTE = {
-  path: "",          // The URL path, with parameter placeholders like {id}
-  methods: ["GET"],  // Allowed HTTP methods
-  description: "",   // Human-readable purpose
-  pathType: "exact", // How to match: "exact", "prefix", or "regex"
-  queryParams: [],   // Expected query parameters: [{ name, required }]
-  headers: [],       // Required headers: [{ name, required }]
-  rateLimit: null,   // Requests per minute, or null for no limit
-  tags: [],          // Classification tags: ["api", "public", "auth-required"]
-};
+```elixir
+schema "routes" do
+  field :path, :string               # URL path, with {param} placeholders
+  field :methods, Wagger.Ecto.EdnList # Allowed HTTP methods, stored as EDN
+  field :path_type, :string           # "exact", "prefix", or "regex"
+  field :description, :string
+  field :query_params, Wagger.Ecto.EdnMapList
+  field :headers, Wagger.Ecto.EdnMapList
+  field :rate_limit, :integer         # Requests per minute, or nil
+  field :tags, Wagger.Ecto.EdnList    # Classification tags
+  belongs_to :application, Wagger.Applications.Application
+end
 ```
+
+Routes are grouped under Applications -- each application represents one web service.  Applications have a name (a unique slug), a description, an optional source (where the routes were imported from), a route checksum (SHA-256, auto-updated on mutations), and visibility controls (`public` and `shareable` flags for the Hub).
 
 A few design choices deserve explanation.
 
 **Path parameters use curly braces.**  We write `/api/v1/users/{id}`, not `/api/v1/users/:id` (Express style) or `/api/v1/users/<id>` (Flask style).  The OpenAPI convention is the most widely recognized, and the generators need a consistent placeholder format to translate into provider-specific wildcards.  If routes are imported from Express-style source code, the bulk importer normalizes `:param` to `{param}` on the way in.
 
-**`pathType` is explicit rather than inferred.**  We could guess that `/static/` is a prefix match because it ends with a slash, but guessing creates subtle bugs.  A path like `/api/v1/events/` might be exact in one application and a prefix in another.  Making the match type explicit costs one extra field and prevents an entire class of misconfiguration.
+**`path_type` is explicit rather than inferred.**  We could guess that `/static/` is a prefix match because it ends with a slash, but guessing creates subtle bugs.  A path like `/api/v1/events/` might be exact in one application and a prefix in another.  Making the match type explicit costs one extra field and prevents an entire class of misconfiguration.
 
-**Rate limits are per-minute.**  This is an abstraction.  AWS WAF actually evaluates rate limits over five-minute windows.  Cloudflare uses configurable periods.  Nginx thinks in requests-per-second.  The generators translate from this canonical unit to whatever the provider expects.  The choice of per-minute is pragmatic:  it is coarse enough to be meaningful (unlike per-second, where "3 requests per second" is hard to reason about for humans) and fine enough to be useful (unlike per-hour, which is too loose for most abuse-prevention scenarios).
+**Rate limits are per-minute.**  This is an abstraction.  AWS WAF evaluates rate limits over five-minute windows.  Cloudflare uses configurable periods.  Nginx thinks in requests-per-second.  The generators translate from this canonical unit to whatever the provider expects.  The choice of per-minute is pragmatic:  it is coarse enough to be meaningful (unlike per-second, where "3 requests per second" is hard to reason about for humans) and fine enough to be useful (unlike per-hour, which is too loose for most abuse-prevention scenarios).
 
-**Tags are freeform strings.**  We do not predefine categories.  An application might tag routes as `public` vs. `auth-required`, or `v1` vs. `v2`, or `read` vs. `write`.  The tag system is intentionally loose because the groupings that matter differ by organization, and the WAF generators do not depend on specific tag values.  Tags exist for the human operator to filter and review routes before generation.
+**EDN for list storage.**  Methods, tags, query parameters, and headers are stored as EDN text in SQLite, parsed on read by custom Ecto types.  This avoids the complexity of join tables for simple list data while keeping the storage human-readable.  The choice of EDN over JSON is deliberate:  EDN is the preferred serialization format in this stack, and it supports a richer set of types.
 
 
 ## Route Discovery
 
-Routes come from two sources, and the tool must handle both.
+Routes come from three sources, and the tool handles all of them.
 
-### White-Box Discovery:  Reading Source Code
+### Bulk Text Import
 
-When you have access to the source, routes can be extracted programmatically.  Every web framework declares routes in a characteristic pattern:
-
-```
-Express:       app.get('/users/:id', handler)
-FastAPI:       @app.get("/users/{user_id}")
-Spring:        @GetMapping("/users/{id}")
-Rails:         get '/users/:id', to: 'users#show'
-Django:        path('users/<int:pk>/', views.user_detail)
-Flask:         @app.route('/users/<int:id>', methods=['GET'])
-Laravel:       Route::get('/users/{id}', [UserController::class, 'show']);
-```
-
-A full parser for each framework is out of scope for this tool (and would need to handle dynamic route registration, middleware-injected routes, and other complications).  Instead, the tool provides a bulk import interface that accepts a simple text format:
+When you have access to the source, routes can be extracted from framework route-listing commands (`flask routes`, `rails routes`, `php artisan route:list`) and pasted into the import interface.  The bulk parser accepts a simple text format:
 
 ```
 GET /api/v1/users
@@ -74,521 +67,512 @@ DELETE /api/v1/items/{id}
 /health
 ```
 
-This format is easy to produce from framework-specific tooling.  Most frameworks have a "list routes" command -- `flask routes`, `rails routes`, `php artisan route:list` -- whose output can be massaged into this format with a few lines of shell scripting.
+The parser is permissive by design:
 
-The bulk parser handles three input formats:
+```elixir
+defmodule Wagger.Import.Bulk do
+  @method_chars ~r/^([A-Za-z,]+)\s+(\/\S*)\s*(?:-\s*(.+))?$/
+  @path_only ~r/^(\/\S*)\s*(?:-\s*(.+))?$/
 
-```javascript
-function parseBulkRoutes(text) {
-  const lines = text.split("\n")
-    .map(l => l.trim())
-    .filter(l => l && !l.startsWith("#"));
-
-  const routes = [];
-  for (const line of lines) {
-    // Matches these formats:
-    //   GET /api/users
-    //   GET,POST /api/users  - Description text
-    //   /api/users  (defaults to GET)
-    const match = line.match(
-      /^(?:((?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)
-        (?:\s*,\s*(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS))*)
-        \s+)?(\S+)(?:\s+-\s+(.*))?$/i
-    );
-
-    if (match) {
-      const methods = match[1]
-        ? match[1].split(",").map(m => m.trim().toUpperCase())
-        : ["GET"];
-      const path = match[2];
-      const desc = match[3] || "";
-
-      // Normalize Express-style :param to OpenAPI-style {param}
-      const normalizedPath = path.replace(/:(\w+)/g, "{$1}");
-
-      routes.push({
-        ...DEFAULT_ROUTE,
-        path: normalizedPath,
-        methods,
-        description: desc,
-        pathType: normalizedPath.endsWith("/")
-          && normalizedPath !== "/"
-          ? "prefix"
-          : "exact",
-      });
-    }
-  }
-  return routes;
-}
+  def parse(text) when is_binary(text) do
+    text
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.reject(fn {line, _n} -> skip?(line) end)
+    |> Enum.reduce({[], []}, fn {line, n}, {routes, skipped} ->
+      case parse_line(line) do
+        {:ok, route} -> {[route | routes], skipped}
+        :error -> {routes, [skipped_entry(n, line) | skipped]}
+      end
+    end)
+    |> then(fn {routes, skipped} -> {Enum.reverse(routes), Enum.reverse(skipped)} end)
+  end
+end
 ```
 
-The regex is permissive by design.  Lines that do not match are silently skipped, which allows pasting output that includes headers or decorative lines from framework route-listing commands.  Comment lines (starting with `#`) are explicitly filtered.
+Lines that do not match either pattern are collected in the `skipped` list rather than raising an error.  This allows pasting output that includes headers or decorative lines from framework route-listing commands.  Comment lines (starting with `#`) and blank lines are filtered before parsing.  Express-style `:param` segments are normalized to `{param}` via regex replacement.
 
-### Black-Box Discovery:  Observing Traffic
+### OpenAPI Import
 
-When source code is unavailable, routes must be inferred from observed behavior.  This is inherently incomplete -- you can never be certain you have found every valid route -- but several techniques help:
+If an application publishes an OpenAPI 3.x specification, it already contains path definitions, method restrictions, parameter schemas, and descriptions in a standardized format.  The OpenAPI importer extracts all of this:
 
-**Access log analysis.**  Given a representative sample of access logs (from a load balancer, reverse proxy, or application server), extract the unique URI paths.  A simple pipeline:
+```elixir
+defmodule Wagger.Import.OpenApi do
+  @http_methods ~w(get post put patch delete head options)
 
-```bash
-# From nginx/apache access logs:
-awk '{print $7}' access.log \
-  | sed 's/\?.*$//' \
-  | sort -u \
-  > observed_paths.txt
-
-# From AWS ALB logs:
-zcat *.log.gz \
-  | awk -F'"' '{print $2}' \
-  | awk '{print $2}' \
-  | sed 's/\?.*$//' \
-  | sort -u \
-  > observed_paths.txt
+  def parse(spec) when is_map(spec) do
+    case Map.fetch(spec, "paths") do
+      :error -> {[], ["No paths found in OpenAPI spec"]}
+      {:ok, paths} -> {parse_paths(paths), []}
+    end
+  end
+end
 ```
 
-**HAR file export.**  Browser developer tools can export HTTP Archive files containing every request made during a session.  These capture AJAX calls, API requests, and resource loads that might not be obvious from the page structure.
+For each path in the spec, the importer iterates over known HTTP method keys, extracts descriptions from `summary` or `description` fields, and collects query and header parameters with their required flags.  The suggested application name is derived from the spec's `info.title` field.
 
-**Crawling.**  Tools like `httpx`, `feroxbuster`, or `gospider` can enumerate reachable paths.  This is noisy and will find paths that should be blocked (like leftover debug endpoints), so the output needs curation before import.
+### Access Log Import
 
-**OpenAPI/Swagger discovery.**  Many APIs publish their route definitions at well-known paths (`/swagger.json`, `/openapi.yaml`, `/api-docs`).  If present, these are the most authoritative black-box source.
+When source code is unavailable, routes can be inferred from observed traffic.  The access log parser supports nginx/Apache combined format, Caddy JSON logs, and AWS ALB logs:
 
-In all cases, the discovered paths are pasted into the bulk import interface.  The operator reviews and annotates them -- adding method restrictions, setting rate limits, tagging -- before generating WAF rules.  This manual review step is intentional.  Blindly importing observed traffic into WAF rules would allow any path an attacker has already probed.
+```elixir
+defmodule Wagger.Import.AccessLog do
+  @nginx_re ~r/"([A-Z]+) ([^\s"]+) HTTP\/[\d.]+"/
 
-
-## WAF Configuration Generators
-
-Each generator takes the same inputs -- an array of routes and a configuration object -- and produces provider-specific output.  The configuration object carries metadata that varies by provider:
-
-```javascript
-const config = {
-  prefix: "myapp",        // Name prefix for rules and metrics
-  scope: "REGIONAL",      // AWS-specific: REGIONAL or CLOUDFRONT
-  mode: "Prevention",     // Azure-specific: Prevention or Detection
-};
+  def parse(input) when is_binary(input) do
+    # Auto-detects format per line: JSON lines → Caddy, quoted request → nginx/ALB
+    # Groups by path, accumulates distinct methods and request count
+    # Returns routes sorted by count descending
+  end
+end
 ```
 
-The generators share a common strategy:  produce a path allowlist rule (block anything not matching a known route), method enforcement rules (block disallowed methods on known routes), and rate limiting rules (throttle high-frequency endpoints).
+Paths are stripped of query strings.  Requests to the same path are grouped together, accumulating distinct methods and a total count.  Routes are returned sorted by request count descending, giving the operator a frequency-ranked view of the observed API surface.
+
+This discovery method is inherently incomplete -- you can never be certain you have found every valid route from logs alone.  The operator reviews and annotates the discovered routes before importing.  This manual review step is intentional:  blindly importing observed traffic into WAF rules would allow any path an attacker has already probed.
+
+
+## The Generation Pipeline
+
+The heart of Wagger is a three-stage pipeline that transforms routes into provider-specific output.  Every generator implements the same behaviour:
+
+```elixir
+defmodule Wagger.Generator do
+  @callback yang_module() :: String.t()
+  @callback map_routes(routes :: [map()], config :: map()) :: map()
+  @callback serialize(instance :: map(), schema :: struct()) :: String.t()
+end
+```
+
+The shared `generate/3` function orchestrates the pipeline:
+
+```elixir
+def generate(provider_module, routes, config) do
+  yang_source = provider_module.yang_module()
+
+  with {:ok, parsed} <- ExYang.parse(yang_source),
+       {:ok, resolved} <- ExYang.resolve(parsed, %{}),
+       instance = provider_module.map_routes(routes, config),
+       :ok <- Validator.validate(instance, resolved) do
+    output = provider_module.serialize(instance, resolved)
+    {:ok, output}
+  end
+end
+```
+
+**Stage 1: YANG schema.**  Each provider defines a YANG model describing the structure of its intermediate representation.  YANG gives us formal type checking, mandatory field enforcement, enum validation, and list key uniqueness -- all verified before serialization.
+
+**Stage 2: Instance tree.**  `map_routes/2` transforms the flat route list into a nested map that conforms to the provider's YANG schema.  This is where provider-specific logic lives:  path translation, method grouping, rate limit conversion, rule ID allocation.
+
+**Stage 3: Serialization.**  `serialize/2` converts the validated instance tree to the provider's native format -- JSON for cloud WAFs, text for Nginx/Caddy/Coraza, YAML for ZAP.
+
+This architecture has a useful property:  the YANG validation step catches structural bugs in the generator before they produce invalid output.  If a generator forgets a mandatory field or uses an invalid enum value, the pipeline rejects it before serialization.
+
 
 ### Path Translation
 
-The first problem every generator must solve is translating our canonical path format into something the provider understands.  Path parameters (`{id}`) need to become wildcards or regex patterns.  Prefix matches need trailing wildcards.
+The first problem every generator must solve is translating canonical path format into something the provider understands.  A shared `PathHelper` module handles the common transformations:
 
-For AWS WAF, which uses byte match statements:
+```elixir
+defmodule Wagger.Generator.PathHelper do
+  def to_regex(%{path: path, path_type: "exact"}) do
+    converted = String.replace(path, ~r/\{[^}]+\}/, "[^/]+")
+    "^#{converted}$"
+  end
 
-```javascript
-function pathToAwsPattern(route) {
-  // {param} becomes * (AWS WAF wildcard)
-  let p = route.path.replace(/\{[^}]+\}/g, "*");
+  def to_regex(%{path: path, path_type: "prefix"}) do
+    converted = String.replace(path, ~r/\{[^}]+\}/, "[^/]+")
+    "^#{converted}.*"
+  end
 
-  // Prefix matches get a trailing wildcard
-  if (route.pathType === "prefix") {
-    p = p.endsWith("/") ? p + "*" : p + "/*";
-  }
+  def to_regex(%{path: path, path_type: "regex"}), do: path
 
-  return p;
-}
+  def to_wildcard(%{path: path, path_type: "exact"}) do
+    String.replace(path, ~r/\{[^}]+\}/, "*")
+  end
+end
 ```
 
-For Cloudflare, which uses its own expression language:
-
-```javascript
-function pathToCloudflareExpr(route) {
-  let p = route.path.replace(/\{[^}]+\}/g, "*");
-
-  if (route.pathType === "regex") {
-    return `http.request.uri.path matches "${p}"`;
-  }
-  if (route.pathType === "prefix") {
-    return `starts_with(http.request.uri.path, "${p}")`;
-  }
-  if (p.includes("*")) {
-    // Exact match with wildcards needs regex
-    return `http.request.uri.path matches "^${p.replace(/\*/g, "[^/]+")}$"`;
-  }
-
-  return `http.request.uri.path eq "${p}"`;
-}
-```
-
-The distinction matters.  Cloudflare's `eq` operator is more efficient than `matches` for exact paths, so we use it when possible and only fall back to regex when the path contains parameter wildcards.
+The `to_regex/1` function anchors patterns:  exact paths get `^...$`, prefix paths get `^....*`, regex paths pass through unchanged.  The `to_wildcard/1` function replaces `{param}` with `*` for providers like AWS WAF that use glob-style matching.  The `to_nginx_location/1` function returns a `{match_type, pattern}` tuple for Nginx's three location directive forms: `=` for exact, `~` for regex, and bare path for prefix.
 
 
 ### Generator:  AWS WAF
 
 AWS WAF v2 uses a deeply nested JSON structure.  A Web ACL contains rules, each rule contains a statement tree, and statements compose with `And`, `Or`, and `Not` operators.
 
-The path allowlist rule uses a `NotStatement` wrapping an `OrStatement`:  "block if the path does NOT match any of these patterns."
+```elixir
+defmodule Wagger.Generator.Aws do
+  @behaviour Wagger.Generator
 
-```javascript
-function generateAwsWaf(routes, config) {
-  const rules = [];
-  const allowPaths = routes.map(r => pathToAwsPattern(r));
+  @standard_transforms [
+    %{"Priority" => 0, "Type" => "URL_DECODE"},
+    %{"Priority" => 1, "Type" => "LOWERCASE"}
+  ]
 
-  // Rule 1: Block requests to unknown paths
-  rules.push({
-    Name: `${config.prefix}-allow-known-paths`,
-    Priority: 1,
-    Action: { Block: {} },
-    Statement: {
-      NotStatement: {
-        Statement: {
-          OrStatement: {
-            Statements: allowPaths.map(p => ({
-              ByteMatchStatement: {
-                FieldToMatch: { UriPath: {} },
-                PositionalConstraint: p.endsWith("/*")
-                  ? "STARTS_WITH"
-                  : (p.includes("*") ? "CONTAINS" : "EXACTLY"),
-                SearchString: p.replace(/\/?\*$/, ""),
-                TextTransformations: [
-                  { Priority: 0, Type: "URL_DECODE" },
-                  { Priority: 1, Type: "LOWERCASE" }
-                ]
-              }
-            }))
-          }
-        }
-      }
-    },
-    VisibilityConfig: {
-      SampledRequestsEnabled: true,
-      CloudWatchMetricsEnabled: true,
-      MetricName: `${config.prefix}-path-allowlist`
+  def map_routes(routes, config) do
+    prefix = config[:prefix] || config["prefix"]
+    scope = config[:scope] || config["scope"] || "REGIONAL"
+    normalized = Enum.map(routes, &normalize/1)
+
+    path_patterns = Enum.map(normalized, &to_path_pattern/1)
+    allowlist_rule = %{"name" => "#{prefix}-path-allowlist", "priority" => 1, ...}
+    method_rules = build_method_rules(normalized, prefix, starting_priority: 10)
+    rate_rules = build_rate_rules(normalized, prefix, starting_priority: 100)
+
+    %{"aws-waf-config" => %{
+      "web-acl-name" => "#{prefix}-web-acl",
+      "scope" => scope,
+      "rules" => [allowlist_rule] ++ method_rules ++ rate_rules
+    }}
+  end
+end
+```
+
+**Text transformations are critical.**  Without `URL_DECODE`, an attacker can bypass the allowlist with percent-encoded paths (`/api/v1/%75sers` instead of `/api/v1/users`).  Without `LOWERCASE`, mixed-case paths might slip through on case-insensitive backends.  Both transformations are applied to every byte match and regex match statement.
+
+**Method enforcement groups routes by their allowed method set** to minimize rule count.  Without grouping, ten routes with the same method set would produce ten rules.  AWS WAF has a limit of 10 rules per Web ACL (expandable, but at cost), so compressing rules matters.
+
+**Rate limit window conversion** deserves emphasis.  The canonical rate limit is per-minute.  AWS WAF evaluates rate-based rules over five-minute sliding windows.  A limit of 100 requests per minute becomes 500 in the AWS configuration:
+
+```elixir
+defp build_rate_rules(normalized, prefix, starting_priority: base) do
+  normalized
+  |> Enum.filter(&(not is_nil(&1.rate_limit)))
+  |> Enum.with_index()
+  |> Enum.map(fn {route, idx} ->
+    %{
+      "name" => "#{prefix}-rate-limit-#{sanitize(route.path)}",
+      "priority" => base + idx,
+      "rule-type" => "rate-limit",
+      "rate-limit" => route.rate_limit * 5
     }
-  });
+  end)
+end
 ```
 
-**Text transformations are critical.**  Without `URL_DECODE`, an attacker can bypass the allowlist with percent-encoded paths (`/api/v1/%75sers` instead of `/api/v1/users`).  Without `LOWERCASE`, mixed-case paths might slip through on case-insensitive backends.  We apply both transformations to every byte match statement.
-
-Method enforcement groups routes by their allowed method set to minimize the number of rules:
-
-```javascript
-  // Group routes by allowed methods to minimize rule count
-  const methodGroups = {};
-  routes.forEach(r => {
-    const key = r.methods.sort().join(",");
-    if (!methodGroups[key]) methodGroups[key] = [];
-    methodGroups[key].push(r);
-  });
-
-  let priority = 2;
-  Object.entries(methodGroups).forEach(([methods, groupRoutes]) => {
-    const methodList = methods.split(",");
-    rules.push({
-      Name: `${config.prefix}-method-enforce-${priority}`,
-      Priority: priority++,
-      Action: { Block: {} },
-      Statement: {
-        AndStatement: {
-          Statements: [
-            // Path matches one of the routes in this group
-            { OrStatement: { Statements: groupRoutes.map(r => /* ... */) } },
-            // AND method is NOT in the allowed set
-            { NotStatement: {
-                Statement: { OrStatement: {
-                  Statements: methodList.map(m => /* byte match on method */)
-                }}
-            }}
-          ]
-        }
-      }
-    });
-  });
-```
-
-This grouping is an optimization.  Without it, ten routes with the same method set would produce ten rules.  AWS WAF has a limit of 10 rules per Web ACL (expandable, but at cost), so compressing rules matters.
-
-Rate limiting uses AWS WAF's `RateBasedStatement`.  The important detail is the window conversion:
-
-```javascript
-  const rateLimited = routes.filter(r => r.rateLimit);
-  rateLimited.forEach(r => {
-    rules.push({
-      Name: `${config.prefix}-rate-${r.path.replace(/[^a-zA-Z0-9]/g, "-")}`,
-      Priority: priority++,
-      Action: { Block: {} },
-      Statement: {
-        RateBasedStatement: {
-          Limit: r.rateLimit * 5,  // AWS evaluates over 5-minute windows
-          AggregateKeyType: "IP",
-          ScopeDownStatement: { /* byte match on the path */ }
-        }
-      }
-    });
-  });
-
-  return JSON.stringify({
-    Name: `${config.prefix}-web-acl`,
-    Scope: config.scope || "REGIONAL",
-    DefaultAction: { Allow: {} },
-    Rules: rules,
-    VisibilityConfig: { /* ... */ }
-  }, null, 2);
-}
-```
-
-The `Limit` multiplication (`rateLimit * 5`) deserves emphasis.  Our canonical rate limit is per-minute.  AWS WAF evaluates rate-based rules over five-minute sliding windows.  A limit of 100 requests per minute becomes 500 in the AWS WAF configuration.  Getting this wrong by a factor of five is a common mistake.
+Getting this wrong by a factor of five is a common mistake.
 
 
 ### Generator:  Cloudflare Firewall Rules
 
-Cloudflare's configuration is conceptually simpler.  Each rule has an expression (in Cloudflare's expression language) and an action.
+Cloudflare's configuration is conceptually simpler.  Each rule has an expression (in Cloudflare's expression language) and an action.  The elegance of the expression language is that the entire allowlist can be a single rule:  `not (path1 or path2 or ...)`.  AWS WAF needs an `OrStatement` containing individual `ByteMatchStatements`; Cloudflare just chains `or` operators.
 
-```javascript
-function generateCloudflareFw(routes, config) {
-  const rules = [];
+Cloudflare distinguishes between match operators:  `eq` for exact paths (most efficient), `starts_with` for prefix matches, and `matches` for regex.  The generator uses `eq` when possible and only falls back to regex when the path contains parameter wildcards.
 
-  // Build a single expression that matches ALL known paths
-  const pathExprs = routes.map(r => pathToCloudflareExpr(r));
-  const allowExpr = pathExprs.join(" or ");
-
-  // Block anything not in the allowlist
-  rules.push({
-    description: `[${config.prefix}] Block unknown paths`,
-    expression: `not (${allowExpr})`,
-    action: "block",
-    enabled: true,
-  });
-```
-
-The elegance of Cloudflare's expression language is that the entire allowlist can be a single rule.  AWS WAF needs an `OrStatement` containing individual `ByteMatchStatements`; Cloudflare just chains `or` operators.
-
-For rate limiting, Cloudflare offers `managed_challenge` as a softer alternative to outright blocking:
-
-```javascript
-  const rateLimited = routes.filter(r => r.rateLimit);
-  rateLimited.forEach(r => {
-    rules.push({
-      description: `[${config.prefix}] Rate limit: ${r.path}`,
-      expression: pathToCloudflareExpr(r),
-      action: "managed_challenge",
-      ratelimit: {
-        characteristics: ["ip.src"],
-        period: 60,
-        requests_per_period: r.rateLimit,
-        mitigation_timeout: 600,
-      },
-      enabled: true,
-    });
-  });
-
-  return JSON.stringify(rules, null, 2);
-}
-```
-
-Note that `managed_challenge` presents a CAPTCHA or browser challenge rather than returning a hard 403.  This is usually the right choice for rate limiting -- legitimate users who happen to be fast get a speed bump rather than a wall.
+For rate limiting, Cloudflare offers `managed_challenge` as a softer alternative to outright blocking.  This presents a CAPTCHA or browser challenge rather than returning a hard 403 -- usually the right choice for rate limiting, since legitimate users who happen to be fast get a speed bump rather than a wall.
 
 
 ### Generator:  Azure Front Door WAF Policy
 
-Azure uses a policy object containing custom rules.  The structure sits between AWS's extreme nesting and Cloudflare's flat simplicity.
+Azure uses a policy object containing custom rules.  The structure sits between AWS's extreme nesting and Cloudflare's flat simplicity.  Azure's `matchValue` is an array of regex patterns that are implicitly OR-ed, keeping the path allowlist rule compact.  The `negateCondition: true` flag inverts the match:  "block if the URI does NOT match any of these patterns."
 
-```javascript
-function generateAzureFd(routes, config) {
-  const rules = [];
-  let priority = 1;
+Rate limiting in Azure Front Door uses `RateLimitRule` with a five-minute window, same as AWS.  The same multiplication factor applies.
 
-  // Path allowlist using regex match
-  rules.push({
-    name: `${config.prefix}AllowKnownPaths`,
-    priority: priority++,
-    ruleType: "MatchRule",
-    action: "Block",
-    matchConditions: [{
-      matchVariable: "RequestUri",
-      operator: "RegEx",
-      negateCondition: true,
-      matchValue: routes.map(r => {
-        let p = r.path.replace(/\{[^}]+\}/g, "[^/]+");
-        if (r.pathType === "prefix") return `^${p}.*`;
-        return `^${p}$`;
-      }),
-      transforms: ["UrlDecode", "Lowercase"]
-    }]
-  });
-```
 
-Azure's `matchValue` is an array of patterns that are implicitly OR-ed, which keeps the rule compact.  The `negateCondition: true` inverts the match:  "block if the URI does NOT match any of these patterns."
+### Generator:  GCP Cloud Armor
 
-Rate limiting in Azure Front Door uses `RateLimitRule` with a five-minute window (like AWS):
-
-```javascript
-  rateLimited.forEach(r => {
-    rules.push({
-      name: `${config.prefix}Rate${r.path.replace(/[^a-zA-Z0-9]/g, "")}`,
-      priority: priority++,
-      ruleType: "RateLimitRule",
-      action: "Block",
-      rateLimitThreshold: r.rateLimit * 5,  // 5-minute window, same as AWS
-      rateLimitDurationInMinutes: 5,
-      matchConditions: [{ /* regex on path */ }]
-    });
-  });
-
-  return JSON.stringify({
-    properties: {
-      customRules: { rules },
-      policySettings: {
-        mode: config.mode || "Prevention",
-        enabledState: "Enabled"
-      }
-    }
-  }, null, 2);
-}
-```
+GCP Cloud Armor uses security policies with CEL (Common Expression Language) expressions for path matching.  The generator produces a JSON security policy document with path-based rules.
 
 
 ### Generator:  Nginx
 
-Nginx is not a cloud WAF, but it is often the first line of defense.  Its configuration is declarative text rather than JSON, so the generator produces a config file:
+Nginx is not a cloud WAF, but it is often the first line of defense.  Its configuration is declarative text rather than JSON:
 
-```javascript
-function generateNginx(routes, config) {
-  let out = `# WAF-style allowlist for ${config.prefix}\n`;
-  out += `# Generated ${new Date().toISOString()}\n\n`;
+```elixir
+defmodule Wagger.Generator.Nginx do
+  @behaviour Wagger.Generator
 
-  // Step 1: A map directive that validates paths
-  out += `map $request_uri $valid_path {\n  default 0;\n`;
-  routes.forEach(r => {
-    let pat = r.path.replace(/\{[^}]+\}/g, "[^/]+");
-    if (r.pathType === "prefix") pat = `~^${pat}`;
-    else if (pat.includes("[^/]+")) pat = `~^${pat}$`;
-    out += `  ${pat}  1;\n`;
-  });
-  out += `}\n\n`;
-
-  // Step 2: Block unknown paths
-  out += `server {\n`;
-  out += `  if ($valid_path = 0) {\n    return 403;\n  }\n\n`;
-
-  // Step 3: Per-location method restrictions
-  routes.forEach(r => {
-    let loc = r.path.replace(/\{[^}]+\}/g, "[^/]+");
-    const directive = loc.includes("[^/]+") || r.pathType === "prefix"
-      ? `location ~ ${r.pathType === "prefix" ? `^${loc}` : `^${loc}$`}`
-      : `location = ${r.path}`;
-
-    out += `  ${directive} {\n`;
-    out += `    limit_except ${r.methods.join(" ")} {\n`;
-    out += `      deny all;\n    }\n`;
-
-    if (r.rateLimit) {
-      const zoneName = `${config.prefix}_${r.path.replace(/[^a-zA-Z0-9]/g, "_")}`;
-      out += `    limit_req zone=${zoneName} `;
-      out += `burst=${Math.ceil(r.rateLimit * 0.2)} nodelay;\n`;
-    }
-
-    out += `    proxy_pass http://upstream;\n`;
-    out += `  }\n\n`;
-  });
-
-  out += `}\n`;
-  return out;
-}
+  def serialize(instance, _schema) do
+    cfg = instance["nginx-config"]
+    # Produces:
+    # 1. A `map` directive for path validation (blocks unknown paths with 403)
+    # 2. `location` blocks with `limit_except` for method enforcement
+    # 3. Optional `limit_req` rate limiting per location
+    # 4. `proxy_pass` to upstream
+  end
+end
 ```
 
 The Nginx generator uses `map` for the initial path validation because it is evaluated once per request and is more efficient than chaining `if` directives.  The `limit_except` directive inside each `location` block is Nginx's idiomatic way to restrict HTTP methods -- it allows the listed methods and denies everything else.
 
-The burst parameter for rate limiting is set to 20% of the per-minute limit.  This allows short bursts of legitimate traffic (a user clicking through several pages quickly) while still throttling sustained abuse.  The `nodelay` flag prevents request queuing, which would add latency rather than rejecting excess requests.
+The burst parameter for rate limiting is set to 20% of the per-minute limit.  This allows short bursts of legitimate traffic while still throttling sustained abuse.  The `nodelay` flag prevents request queuing, which would add latency rather than rejecting excess requests.
 
 
-### Generator:  Terraform (AWS WAF)
+### Generator:  Caddy
 
-The Terraform generator produces the same logical rules as the AWS WAF JSON generator, but in HashiCorp Configuration Language (HCL).  This is the format most teams will actually deploy, since infrastructure-as-code is the standard practice for WAF management.
+The Caddy generator produces a Caddyfile with named matcher blocks (`@name`) using `path` or `path_regexp` directives, `route` blocks with `reverse_proxy` and optional `rate_limit`, and a catch-all `respond 403` to block unmatched requests.  Similar to Nginx but with Caddy's declarative matcher syntax.
 
-```javascript
-function generateTerraformAws(routes, config) {
-  let out = `resource "aws_wafv2_web_acl" "${config.prefix}_acl" {\n`;
-  out += `  name        = "${config.prefix}-web-acl"\n`;
-  out += `  scope       = "${config.scope || "REGIONAL"}"\n\n`;
-  out += `  default_action {\n    allow {}\n  }\n\n`;
 
-  // Path allowlist rule
-  out += `  rule {\n`;
-  out += `    name     = "${config.prefix}-path-allowlist"\n`;
-  out += `    priority = 1\n\n`;
-  out += `    action {\n      block {}\n    }\n\n`;
-  out += `    statement {\n`;
-  out += `      not_statement {\n`;
-  out += `        statement {\n`;
-  out += `          or_statement {\n`;
+### Generator:  Coraza/ModSecurity
 
-  routes.forEach(r => {
-    const p = pathToAwsPattern(r);
-    const constraint = p.endsWith("/*")
-      ? "STARTS_WITH"
-      : (p.includes("*") ? "CONTAINS" : "EXACTLY");
+Coraza is the open-source ModSecurity-compatible WAF from OWASP.  Its only configuration language is SecLang -- the same directive language as ModSecurity.  There is no separate "native" format.
 
-    out += `            byte_match_statement {\n`;
-    out += `              field_to_match { uri_path {} }\n`;
-    out += `              positional_constraint = "${constraint}"\n`;
-    out += `              search_string         = "${p.replace(/\/?\*$/, "")}"\n`;
-    out += `              text_transformation {\n`;
-    out += `                priority = 0\n`;
-    out += `                type     = "URL_DECODE"\n`;
-    out += `              }\n`;
-    out += `            }\n`;
-  });
+The generator produces a standalone `.conf` file:
 
-  out += `          }\n        }\n      }\n    }\n`;
-  out += `  }\n`;
-  out += `}\n`;
+```elixir
+defmodule Wagger.Generator.Coraza do
+  @behaviour Wagger.Generator
 
-  return out;
-}
+  @default_start_rule_id 100_001
+  @catch_all_offset 90_000
+
+  def map_routes(routes, config) do
+    start_id = parse_int(config, "start_rule_id", @default_start_rule_id)
+    rule_engine = config[:rule_engine] || config["rule_engine"] || "On"
+
+    rules = routes
+      |> Enum.with_index()
+      |> Enum.map(fn {route, idx} ->
+        %{
+          "id" => start_id + idx,
+          "path-pattern" => PathHelper.to_regex(normalize(route)),
+          "methods" => normalize(route).methods
+        }
+      end)
+
+    %{"coraza-config" => %{
+      "rule-engine" => rule_engine,
+      "start-rule-id" => start_id,
+      "rules" => rules,
+      "catch-all-rule-id" => start_id + @catch_all_offset
+    }}
+  end
+end
 ```
 
+Each route becomes a `SecRule REQUEST_URI` with `@rx` regex matching, chained with a `SecRule REQUEST_METHOD` using `@pm` (phrase match) for method enforcement.  The output looks like:
 
-## The Export Format
+```
+SecRuleEngine On
+SecRequestBodyAccess On
+SecDefaultAction "phase:1,log,auditlog,deny,status:403"
 
-The canonical route schema is also the export format.  When you export routes, you get a JSON file that contains a version number, a timestamp, and the array of routes:
+# GET POST /api/users — Users
+SecRule REQUEST_URI "@rx ^/api/users$" "id:100001,phase:1,chain,allow"
+  SecRule REQUEST_METHOD "@pm GET POST" "t:none"
 
-```json
-{
-  "version": "1.0",
-  "exported": "2026-04-13T14:30:00.000Z",
-  "routes": [
-    {
-      "path": "/api/v1/users",
-      "methods": ["GET", "POST"],
-      "pathType": "exact",
-      "description": "User listing and creation",
-      "queryParams": [
-        { "name": "page", "required": false },
-        { "name": "limit", "required": false }
-      ],
-      "headers": [
-        { "name": "Authorization", "required": true }
-      ],
-      "rateLimit": 100,
-      "tags": ["api", "auth-required"]
-    }
+# Deny all undeclared paths
+SecRule REQUEST_URI "@rx .*" "id:190001,phase:1,deny,status:403,msg:'No matching route'"
+```
+
+Key decisions:  all enforcement in phase 1 (request headers, cheapest and earliest).  Rate limits are emitted as comments since ModSecurity lacks native per-path rate limiting.  Rule IDs are configurable (default 100001) to avoid collisions with existing rulesets.  The catch-all deny rule gets ID `start + 90000`.
+
+
+### Generator:  OWASP ZAP Automation Plan
+
+The ZAP generator is different from the others:  it does not produce WAF configuration.  Instead, it produces a test plan that *verifies* a deployed WAF configuration is working correctly.
+
+The output is an OWASP ZAP automation framework YAML plan with three `requestor` jobs:
+
+```elixir
+defmodule Wagger.Generator.Zap do
+  @behaviour Wagger.Generator
+
+  @all_methods ~w(GET POST PUT PATCH DELETE HEAD OPTIONS)
+
+  @bad_paths [
+    {"/nonexistent", "Undeclared path"},
+    {"/api/../etc/passwd", "Path traversal attempt"},
+    {"//double-slash", "Double slash"},
+    {"/%00null", "Null byte injection"}
   ]
+
+  defp build_positive_tests(routes, target_url) do
+    # For each route, for each allowed method: expect non-403
+  end
+
+  defp build_negative_method_tests(routes, target_url) do
+    # For each route, for each disallowed method: expect 403
+  end
+
+  defp build_negative_path_tests(target_url) do
+    # Fixed set of synthetic bad paths: expect 403
+  end
+end
+```
+
+**Positive tests** confirm that declared routes with allowed methods return non-403.  **Negative method tests** confirm that disallowed methods on declared routes return 403.  **Negative path tests** probe a fixed set of synthetic bad paths (path traversal, null bytes, double slashes) to verify the catch-all deny works.
+
+Path parameters are expanded to example values (`{id}` becomes `1`) so the URLs are concrete.  The target URL is configurable, falling back to a `{{TARGET_URL}}` placeholder if not provided.
+
+
+## YANG as Intermediate Schema
+
+Each provider has a YANG model defining the structure of its instance data tree.  A shared `wagger-common.yang` defines reusable types:
+
+```yang
+module wagger-common {
+  typedef http-method {
+    type enumeration { enum "GET"; enum "POST"; enum "PUT"; ... }
+  }
+  typedef path-type {
+    type enumeration { enum "exact"; enum "prefix"; enum "regex"; }
+  }
+  typedef rate-limit {
+    type uint32 { range "1..1000000"; }
+  }
 }
 ```
 
-This file should be checked into version control alongside your application code.  When the application adds or removes routes, update the route definitions.  When you need WAF rules for a new provider, generate them from the same file.  The routes file is the single source of truth; the WAF configurations are disposable outputs.
+Provider schemas define the container structure for their intermediate representation.  For example, the Coraza YANG model:
 
-The version field exists to support future schema evolution.  If we add fields (like request body validation or IP allowlists per route), the version number allows import logic to handle old and new formats gracefully.
+```yang
+module wagger-coraza {
+  container coraza-config {
+    leaf config-name { type string; mandatory true; }
+    leaf rule-engine { type enumeration { enum "On"; enum "Off"; enum "DetectionOnly"; } }
+    leaf start-rule-id { type uint32; mandatory true; }
+    list rules {
+      key "id";
+      leaf id { type uint32; mandatory true; }
+      leaf path-pattern { type string; mandatory true; }
+      leaf-list methods { type string; }
+    }
+    leaf catch-all-rule-id { type uint32; mandatory true; }
+  }
+}
+```
+
+The `Wagger.Generator.Validator` module walks the instance data against the resolved YANG schema, checking mandatory fields, type correctness, enum values, list key presence, and duplicate detection.  This catches generator bugs at development time rather than deployment time.
+
+
+## Drift Detection
+
+Once a WAF configuration has been generated from a set of routes, the routes may change:  new endpoints added, old ones removed, rate limits adjusted.  Wagger detects this drift by comparing the current route state against the last generation snapshot.
+
+```elixir
+defmodule Wagger.Drift do
+  def detect(%Application{} = app, provider) do
+    current_routes = Routes.list_routes(app)
+    normalized = normalize_for_snapshot(current_routes)
+    current_checksum = compute_checksum(normalized)
+
+    case Snapshots.latest_snapshot(app, provider) do
+      nil -> %Drift{status: :never_generated}
+      snapshot when snapshot.checksum == current_checksum ->
+        %Drift{status: :current}
+      snapshot ->
+        changes = structural_diff(normalized, decode_snapshot(snapshot.route_snapshot))
+        %Drift{status: :drifted, changes: changes}
+    end
+  end
+end
+```
+
+**Fast path:**  SHA-256 checksum comparison.  Routes are sorted by path, serialized to Erlang binary format, and hashed.  If the checksum matches the snapshot, no diff is needed.
+
+**Structural diff:**  If checksums differ, the two route sets are diffed by path.  The result is `%{added: [...], removed: [...], modified: [...]}`.  Modified routes are those where the path exists in both sets but the methods, path type, or rate limit has changed.
+
+Drift is computed on demand, not polled.  The dashboard shows drift status for every app-provider pair, color-coded:  green for current, amber for drifted (with change count), grey for never generated.
+
+
+## Snapshots and Encryption
+
+Every generation creates an immutable snapshot:  the provider, config parameters, frozen route data, generated output, and a checksum.  Snapshots are the audit trail for what was generated, when, and from what input.
+
+The output field is encrypted at rest using `Comn.Secrets.Local` (ChaCha20-Poly1305 AEAD with an Ed25519-derived key):
+
+```elixir
+defmodule Wagger.Secrets do
+  alias Comn.Secrets.{Key, Local}
+
+  def lock(plaintext) when is_binary(plaintext) do
+    key = get_or_create_key()
+    case Local.lock(plaintext, key) do
+      {:ok, locked} -> {:ok, locked |> :erlang.term_to_binary() |> Base.encode64()}
+      {:error, _} = err -> err
+    end
+  end
+end
+```
+
+The encryption key is auto-generated on first use and stored at `priv/secrets/wagger.key` (gitignored).  Decryption falls back gracefully to raw output for snapshots created before encryption was enabled.
+
+Snapshots also record `request_id` and `generated_by` from the ambient `Comn.Contexts`, providing audit trail linkage back to the authenticated user and request that triggered the generation.
+
+
+## The Public Hub
+
+Applications marked `public` and `shareable` are published to the Hub at `/hub`.  The Hub is read-only and requires no authentication:  anyone can browse published API definitions, view route treemaps, and generate WAF configs.
+
+The Hub addresses applications by name slug (`/hub/petstore-api`) rather than numeric ID, since these are public-facing URLs that should be stable and human-readable.
+
+The `shareable` flag requires `public` -- toggling `public` off forces `shareable` off.  This prevents the accidental state of a private but shareable application.
+
+
+## Error Handling
+
+Wagger uses `Comn.Errors.Registry` for machine-readable error codes.  Each error is declared at compile time with a namespace, category, default message, and optional HTTP status:
+
+```elixir
+defmodule Wagger.Errors do
+  use Comn.Errors.Registry
+
+  register_error "wagger.generator/validation_failed", :validation,
+    message: "Instance data failed YANG schema validation"
+
+  register_error "wagger.generator/unknown_provider", :validation,
+    message: "Unknown provider name", status: 400
+
+  register_error "wagger.accounts/auth_failed", :auth,
+    message: "Invalid or missing API key", status: 401
+
+  register_error "wagger.applications/protected", :auth,
+    message: "Cannot delete a protected application", status: 403
+end
+```
+
+At runtime, errors are created via `Comn.Errors.Registry.error!/2`, which produces a `Comn.Errors.ErrorStruct` enriched with ambient context (request ID, trace ID, correlation ID).  The fallback controller renders these as structured JSON with the registered HTTP status.
+
+
+## Event Broadcasting
+
+Route mutations, application changes, and generation events are broadcast through `Comn.EventBus` (Registry-based pub/sub) and recorded in `Comn.EventLog` (in-memory append-only log):
+
+```elixir
+defmodule Wagger.Events do
+  alias Comn.Events.EventStruct
+
+  def route_changed(action, route) when action in [:created, :updated, :deleted] do
+    emit(:route, "wagger.route.#{action}", %{
+      path: route.path,
+      application_id: route.application_id,
+      methods: route.methods
+    })
+  end
+
+  def config_generated(app, provider, snapshot_id) do
+    emit(:generation, "wagger.config.generated", %{
+      application_id: app.id,
+      provider: provider,
+      snapshot_id: snapshot_id
+    })
+  end
+end
+```
+
+Events are automatically enriched with the actor from the ambient `Comn.Contexts` when available.  The `EventStruct` auto-pulls `request_id` and `correlation_id` from the process dictionary.
 
 
 ## Extending the System
 
 Several directions are natural next steps.
 
-**Source code parsers.**  Rather than relying on framework route-listing commands, a dedicated parser could read Express `app.get()` calls, FastAPI `@app.get` decorators, Spring `@RequestMapping` annotations, or Rails `config/routes.rb` directly.  Each parser would produce the canonical route array.  The challenge is handling dynamic route registration, middleware-injected routes, and metaprogramming -- which is why the initial version opts for the simpler bulk-import approach.
+**Source code parsers.**  Rather than relying on framework route-listing commands, a dedicated parser could read Express `app.get()` calls, FastAPI `@app.get` decorators, Spring `@RequestMapping` annotations, or Rails `config/routes.rb` directly.
 
-**OpenAPI import.**  If an application publishes an OpenAPI (Swagger) specification, it already contains path definitions, method restrictions, and parameter schemas in a standardized format.  An OpenAPI importer would be the highest-fidelity route discovery mechanism.
+**Terraform providers.**  The generator pipeline is not WAF-specific.  It takes routes and produces text.  Terraform HCL wrapping any of the existing providers is a natural next target, as are Kubernetes Ingress manifests, Envoy VirtualService configs, and API Gateway definitions.
 
-**Additional providers.**  Akamai and Fastly each have their own WAF configuration formats.  The generator architecture (a function that takes routes and config, returns a string) makes adding new providers straightforward.  GCP Cloud Armor, Coraza/ModSecurity, and OWASP ZAP have already been added using this pattern.
+**Hub federation.**  The current Hub is local to a single Wagger instance.  A central registry that multiple instances push to and pull from would enable cross-organization API definition sharing.
 
-**Drift detection.**  Given access to both the route definition file and the deployed WAF configuration, a diff tool could detect when they diverge -- routes added to the application but not to the WAF, or stale WAF rules for routes that no longer exist.
+**Hub derive.**  Select a subset of routes from a published application and derive a scoped policy -- for example, an egress policy that permits only GETs to specific paths.
 
-**CI/CD integration.**  The generation logic can run in a pipeline:  on each deploy, re-extract routes from source code, compare against the stored route definitions, and regenerate WAF rules if anything changed.  The generated rules can be applied via the provider's API or Terraform.
+**CI/CD integration.**  The generation logic can run in a pipeline:  on each deploy, re-extract routes from source code, compare against the stored route definitions, and regenerate WAF rules if anything changed.
 
 
 ## Summary
 
-The WAF Rule Generator separates two concerns that are usually tangled together:  knowing what your application exposes, and telling your WAF about it.  The canonical route schema captures the first concern in a provider-agnostic format.  The generators handle the second, translating that knowledge into AWS WAF JSON, Cloudflare expressions, Azure Front Door policies, GCP Cloud Armor policies, Nginx configs, Caddy configs, Coraza/ModSecurity SecRule directives, and OWASP ZAP automation test plans.
+Wagger separates two concerns that are usually tangled together:  knowing what your application exposes, and telling your WAF about it.  The canonical route schema captures the first concern in a provider-agnostic format.  Eight generators handle the second, translating that knowledge into AWS WAF JSON, Cloudflare expressions, Azure Front Door policies, GCP Cloud Armor policies, Nginx configs, Caddy configs, Coraza/ModSecurity SecRule directives, and OWASP ZAP automation test plans.
+
+The YANG validation layer catches structural bugs before they become misconfigurations.  The drift detection system catches temporal bugs -- routes that changed after the WAF was configured.  The snapshot audit trail records what was generated, when, by whom, encrypted at rest.  The Hub makes API definitions shareable.  The Comn integration provides structured errors, request context propagation, event broadcasting, and encryption.
 
 The literate structure of this document is intentional.  WAF rules are security-critical infrastructure.  Understanding *why* a rule is shaped the way it is -- why text transformations are applied, why rate limits are multiplied by five, why method groups are compressed -- matters as much as having the rule in the first place.  When the next engineer inherits this system, the prose and the code are in the same place.
