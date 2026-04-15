@@ -330,6 +330,14 @@
               >
                 Regenerate
               </button>
+              <button
+                phx-click="delete_provider_config"
+                phx-value-provider={provider}
+                data-confirm={"Delete all #{String.capitalize(provider)} snapshots for this app?"}
+                class="px-3 py-1.5 rounded text-xs font-bold btn-error btn-outline"
+              >
+                Delete
+              </button>
               <%= if snap do %>
                 <span class="text-xs text-[color:var(--tn-text-muted)]">
                   Last generated: <%= snap.inserted_at %>

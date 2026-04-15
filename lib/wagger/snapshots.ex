@@ -5,6 +5,10 @@ defmodule Wagger.Snapshots do
   Snapshots are immutable records of WAF config generation events, scoped to an
   Application and keyed by provider. Use this context to record generation history
   and retrieve the most recent snapshot for drift detection.
+
+  The `output` field is encrypted at rest via `Wagger.Secrets`. Use
+  `decrypt_output/1` to retrieve plaintext. Pre-encryption snapshots are
+  handled gracefully via fallback.
   """
 
   import Ecto.Query, warn: false
@@ -19,10 +23,59 @@ defmodule Wagger.Snapshots do
   Returns `{:ok, %Snapshot{}}` on success or `{:error, %Ecto.Changeset{}}` on failure.
   """
   def create_snapshot(attrs \\ %{}) do
+    attrs = encrypt_output(attrs)
+
     %Snapshot{}
     |> Snapshot.changeset(attrs)
     |> Repo.insert()
   end
+
+  defp encrypt_output(attrs) do
+    {key, output} =
+      cond do
+        Map.has_key?(attrs, :output) -> {:output, Map.get(attrs, :output)}
+        Map.has_key?(attrs, "output") -> {"output", Map.get(attrs, "output")}
+        true -> {nil, nil}
+      end
+
+    case {key, output} do
+      {nil, _} -> attrs
+      {_, nil} -> attrs
+      {k, plaintext} ->
+        case Wagger.Secrets.lock(plaintext) do
+          {:ok, locked} -> Map.put(attrs, k, locked)
+          {:error, _} -> attrs
+        end
+    end
+  end
+
+  @doc """
+  Deletes all snapshots for the given application and provider.
+
+  Returns `{count, nil}` where count is the number of deleted rows.
+  """
+  def delete_snapshots_for_provider(%Application{} = app, provider) when is_binary(provider) do
+    Snapshot
+    |> where([s], s.application_id == ^app.id and s.provider == ^provider)
+    |> Repo.delete_all()
+  end
+
+  @doc """
+  Decrypts and returns the output from a snapshot.
+
+  Falls back to the raw output if decryption fails (handles
+  snapshots created before encryption was enabled).
+  """
+  def decrypt_output(%Snapshot{output: output}) when is_binary(output) do
+    case Wagger.Secrets.unlock(output) do
+      {:ok, plaintext} -> plaintext
+      {:error, _} -> output
+    end
+  rescue
+    ArgumentError -> output
+  end
+
+  def decrypt_output(_), do: nil
 
   @doc """
   Returns all Snapshots for the given Application, optionally filtered by provider.

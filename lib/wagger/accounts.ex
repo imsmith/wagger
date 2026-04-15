@@ -42,7 +42,7 @@ defmodule Wagger.Accounts do
     hash = hash_api_key(api_key)
 
     case Repo.get_by(User, api_key_hash: hash) do
-      nil -> :error
+      nil -> {:error, Comn.Errors.Registry.error!("wagger.accounts/auth_failed")}
       user -> {:ok, user}
     end
   end
@@ -63,7 +63,9 @@ defmodule Wagger.Accounts do
   Deletes a user. Returns `{:ok, user}` or `{:error, :protected}` for the
   admin user, or `{:error, changeset}` on failure.
   """
-  def delete_user(%User{username: "admin"}), do: {:error, :protected}
+  def delete_user(%User{username: "admin"}) do
+    {:error, Comn.Errors.Registry.error!("wagger.accounts/protected_user")}
+  end
 
   def delete_user(%User{} = user) do
     Repo.delete(user)

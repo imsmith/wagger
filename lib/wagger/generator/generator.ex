@@ -12,6 +12,9 @@ defmodule Wagger.Generator do
   2. Call `map_routes/2` to build the instance tree
   3. Validate the instance against the YANG schema
   4. Call `serialize/2` to produce the output string
+
+  Errors from any stage are wrapped in `Comn.Errors.ErrorStruct` with appropriate
+  categories (`:validation` for schema violations, `:internal` for unexpected failures).
   """
 
   alias Wagger.Generator.Validator
@@ -38,7 +41,24 @@ defmodule Wagger.Generator do
       output = provider_module.serialize(instance, resolved)
       {:ok, output}
     else
-      {:error, reason} -> {:error, reason}
+      {:error, reasons} when is_list(reasons) ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/validation_failed",
+           message: Enum.join(reasons, "; "),
+           field: "instance"
+         )}
+
+      {:error, reason} when is_binary(reason) ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/yang_parse_failed",
+           message: reason
+         )}
+
+      {:error, reason} ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/yang_resolve_failed",
+           message: inspect(reason)
+         )}
     end
   end
 end

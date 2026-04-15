@@ -31,6 +31,7 @@ defmodule WaggerWeb.DashboardLive do
        new_app_import_mode: "openapi",
        new_app_input: "",
        new_app_preview: nil,
+       loading: nil,
        page_title: "Dashboard",
        active_nav: :dashboard
      )
@@ -69,7 +70,6 @@ defmodule WaggerWeb.DashboardLive do
 
   @impl true
   def handle_event("preview_new_app", params, socket) do
-    # Check for uploaded file first, fall back to textarea input
     {input, socket} =
       case consume_uploaded_entries(socket, :spec_file, fn %{path: path}, _entry ->
         {:ok, File.read!(path)}
@@ -78,8 +78,14 @@ defmodule WaggerWeb.DashboardLive do
         [] -> {params["input"] || "", socket}
       end
 
-    name = params["name"] || ""
-    do_preview(input, name, socket)
+    if String.trim(input) == "" do
+      {:noreply, put_flash(socket, :error, "No input provided — paste data, drop a file, or browse")}
+    else
+      name = params["name"] || ""
+      socket = assign(socket, :loading, :preview)
+      send(self(), {:do_preview, input, name})
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -89,28 +95,44 @@ defmodule WaggerWeb.DashboardLive do
     if is_nil(preview) or name == "" do
       {:noreply, put_flash(socket, :error, "Provide an app name and import data")}
     else
-      case Applications.create_application(%{name: name}) do
-        {:ok, app} ->
-          for route_map <- preview.parsed do
-            attrs = Map.take(route_map, [:path, :methods, :path_type, :description, :query_params, :headers, :rate_limit, :tags])
-            Routes.create_route(app, attrs)
-          end
+      socket = assign(socket, :loading, :creating)
+      send(self(), {:do_create_app, name, preview})
+      {:noreply, socket}
+    end
+  end
 
-          apps = Applications.list_applications()
-          drift_data = build_drift_data(apps)
+  @impl true
+  def handle_info({:do_preview, input, name}, socket) do
+    socket = do_preview(input, name, socket)
+    {:noreply, assign(socket, :loading, nil)}
+  end
 
-          {:noreply,
-            socket
-            |> assign(apps: apps, drift_data: drift_data,
-                      show_new_app: false, new_app_preview: nil,
-                      new_app_name: "", new_app_input: "")
-            |> put_flash(:info, "Created #{name} with #{length(preview.parsed)} routes")
-            |> push_navigate(to: ~p"/applications/#{app.id}")}
+  @impl true
+  def handle_info({:do_create_app, name, preview}, socket) do
+    case Applications.create_application(%{name: name}) do
+      {:ok, app} ->
+        for route_map <- preview.parsed do
+          attrs = Map.take(route_map, [:path, :methods, :path_type, :description, :query_params, :headers, :rate_limit, :tags])
+          Routes.create_route(app, attrs)
+        end
 
-        {:error, changeset} ->
-          msg = changeset.errors |> Enum.map(fn {k, {v, _}} -> "#{k} #{v}" end) |> Enum.join(", ")
-          {:noreply, put_flash(socket, :error, msg)}
-      end
+        apps = Applications.list_applications()
+        drift_data = build_drift_data(apps)
+
+        {:noreply,
+          socket
+          |> assign(apps: apps, drift_data: drift_data, loading: nil,
+                    show_new_app: false, new_app_preview: nil,
+                    new_app_name: "", new_app_input: "")
+          |> put_flash(:info, "Created #{name} with #{length(preview.parsed)} routes")
+          |> push_navigate(to: ~p"/applications/#{app.id}")}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        msg = changeset.errors |> Enum.map(fn {k, {v, _}} -> "#{k} #{v}" end) |> Enum.join(", ")
+        {:noreply, socket |> assign(:loading, nil) |> put_flash(:error, msg)}
+
+      {:error, %Comn.Errors.ErrorStruct{} = err} ->
+        {:noreply, socket |> assign(:loading, nil) |> put_flash(:error, err.message)}
     end
   end
 
@@ -126,6 +148,8 @@ defmodule WaggerWeb.DashboardLive do
               title = get_in(spec, ["info", "title"]) || ""
               suggested = title |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-") |> String.trim("-")
               {routes, errors, suggested}
+            {:error, %Jason.DecodeError{} = err} ->
+              {[], ["Invalid JSON: #{Exception.message(err)}"], ""}
             {:error, _} ->
               {[], ["Invalid JSON"], ""}
           end
@@ -139,11 +163,23 @@ defmodule WaggerWeb.DashboardLive do
 
     app_name = if name == "" and suggested_name != "", do: suggested_name, else: name
 
-    {:noreply, assign(socket,
+    socket =
+      cond do
+        parsed == [] and skipped == [] ->
+          put_flash(socket, :error, "No routes found in input")
+
+        parsed == [] ->
+          put_flash(socket, :error, "No valid routes found — #{length(skipped)} lines skipped")
+
+        true ->
+          socket
+      end
+
+    assign(socket,
       new_app_name: app_name,
       new_app_input: input,
       new_app_preview: %{parsed: parsed, skipped: skipped}
-    )}
+    )
   end
 
   # ---------------------------------------------------------------------------

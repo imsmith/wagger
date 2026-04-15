@@ -5,6 +5,10 @@ defmodule Wagger.Applications do
   Provides CRUD operations and tag-based filtering over the `applications` table.
   Tags are stored as EDN lists (e.g. `"[:api :public]"`) and can be queried by
   keyword membership using substring matching.
+
+  Applications can be marked `public` (visible without auth) and `shareable`
+  (published to the Hub). Shareable requires public. Use `list_shareable_applications/0`
+  and `get_shareable_application_by_name!/1` for Hub queries.
   """
 
   import Ecto.Query, warn: false
@@ -69,9 +73,15 @@ defmodule Wagger.Applications do
   Returns `{:ok, %Application{}}` on success or `{:error, %Ecto.Changeset{}}` on failure.
   """
   def create_application(attrs \\ %{}) do
-    %Application{}
-    |> Application.changeset(attrs)
-    |> Repo.insert()
+    result =
+      %Application{}
+      |> Application.changeset(attrs)
+      |> Repo.insert()
+
+    with {:ok, app} <- result do
+      Wagger.Events.app_changed(:created, app)
+      {:ok, app}
+    end
   end
 
   @doc """
@@ -80,16 +90,35 @@ defmodule Wagger.Applications do
   Returns `{:ok, %Application{}}` on success or `{:error, %Ecto.Changeset{}}` on failure.
   """
   def update_application(%Application{} = application, attrs) do
-    application
-    |> Application.changeset(attrs)
-    |> Repo.update()
+    result =
+      application
+      |> Application.changeset(attrs)
+      |> Repo.update()
+
+    with {:ok, app} <- result do
+      Wagger.Events.app_changed(:updated, app)
+      {:ok, app}
+    end
   end
+
+  @protected_apps ~w(my-api auth-service)
+
+  @doc "Returns true if the application is protected from deletion."
+  def protected?(%Application{name: name}), do: name in @protected_apps
 
   @doc """
   Deletes an Application.
 
-  Returns `{:ok, %Application{}}` on success or `{:error, %Ecto.Changeset{}}` on failure.
+  Protected applications (`my-api`, `auth-service`) cannot be deleted.
+  Returns `{:ok, %Application{}}` on success, `{:error, %ErrorStruct{}}` for
+  protected apps, or `{:error, %Ecto.Changeset{}}` on failure.
   """
+  def delete_application(%Application{name: name}) when name in @protected_apps do
+    {:error, Comn.Errors.Registry.error!("wagger.applications/protected",
+      message: "Cannot delete protected application: #{name}"
+    )}
+  end
+
   def delete_application(%Application{} = application) do
     Repo.delete(application)
   end

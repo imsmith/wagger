@@ -5,6 +5,18 @@ defmodule Wagger.Applications.Application do
   Applications are the top-level grouping for routes in Wagger. The name must be a
   lowercase slug (`[a-z0-9][a-z0-9-]*`) and is unique across the system. Tags are stored
   as an EDN list and support tag-based filtering.
+
+  ## Visibility and Sharing
+
+  - `public` — when true, the application is visible to unauthenticated users
+  - `shareable` — when true, the application appears in the public Hub for anyone to
+    browse routes and generate configs. Requires `public: true`.
+
+  ## Route Tracking
+
+  - `source` — optional file path or URL where routes were imported from
+  - `route_checksum` — SHA-256 of the current normalized route set, automatically
+    updated on every route create/update/delete via `Wagger.Routes`
   """
 
   use Ecto.Schema

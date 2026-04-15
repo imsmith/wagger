@@ -53,8 +53,8 @@ defmodule WaggerWeb.UserLive do
       {:ok, _} ->
         {:noreply, assign(socket, :users, Accounts.list_users())}
 
-      {:error, :protected} ->
-        {:noreply, put_flash(socket, :error, "Cannot delete the admin user")}
+      {:error, %Comn.Errors.ErrorStruct{} = err} ->
+        {:noreply, put_flash(socket, :error, err.message)}
     end
   end
 end

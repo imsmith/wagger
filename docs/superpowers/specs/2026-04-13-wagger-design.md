@@ -45,6 +45,10 @@ Top-level grouping. Each application represents one web service.
 | name | text | unique, slug-style (`my-api`) |
 | description | text | |
 | tags | text | EDN list |
+| source | text | file path or URL where routes were imported from |
+| route_checksum | text | SHA-256 of current routes, auto-updated on route mutations |
+| public | boolean | default false — visible to unauthenticated users |
+| shareable | boolean | default false — publishable to Hub (requires `public: true`) |
 | inserted_at | text | ISO 8601 |
 | updated_at | text | ISO 8601 |
 
@@ -81,8 +85,10 @@ Foundation for drift detection. Records what was generated, when, for which prov
 | provider | text | `aws`, `cloudflare`, `azure`, `gcp`, `nginx`, `caddy`, `coraza`, `zap` |
 | config_params | text | EDN — provider-specific config |
 | route_snapshot | text | EDN — frozen copy of routes at generation time |
-| output | text | generated config verbatim |
+| output | text | generated config, encrypted at rest via `Comn.Secrets.Local` |
 | checksum | text | SHA-256 of route_snapshot for fast drift comparison |
+| request_id | text | correlation ID from `Comn.Contexts` |
+| generated_by | text | username of the actor who triggered generation |
 | inserted_at | text | |
 
 ### Users
@@ -328,6 +334,26 @@ Request signing for API consumers. Server stores client public key. Requests inc
 
 No roles or permissions in v1. Any authenticated user can do anything. Authorization designed when a real multi-team use case exists.
 
+## Comn Integration
+
+Wagger uses the `comn` library for cross-cutting infrastructure concerns.
+
+### Errors (`Comn.Errors`)
+
+The generator pipeline wraps failures in `Comn.Errors.ErrorStruct` with categorized reasons (`:validation`, `:internal`). The fallback controller and generate controller render structured error JSON with `error`, `reason`, `field`, and `suggestion` fields.
+
+### Contexts (`Comn.Contexts`)
+
+The API auth plug sets a process-scoped context on each authenticated request with `request_id`, `user_id`, and `actor`. Snapshots record `request_id` and `generated_by` from the context for audit trails. Hub/LiveView requests without auth have no context — those fields stay nil.
+
+### Events (`Comn.Events`)
+
+`Wagger.Events` emits structured events via `Comn.EventBus` (Registry-based pub/sub) and `Comn.EventLog` (in-memory append-only log). Events are enriched with context data when available. Topics: `wagger.route.{created,updated,deleted}`, `wagger.app.{created,updated}`, `wagger.config.generated`.
+
+### Secrets (`Comn.Secrets`)
+
+`Wagger.Secrets` wraps `Comn.Secrets.Local` (ChaCha20-Poly1305 AEAD) for encryption at rest. Snapshot `output` fields are encrypted before persistence and decrypted on read. An auto-generated Ed25519 key is stored at `priv/secrets/wagger.key` (gitignored). Pre-encryption snapshots are handled gracefully via fallback.
+
 ## LiveView UI
 
 Designed around Magic Ink principles: information-first, manipulation-secondary.
@@ -343,6 +369,14 @@ Route surface visualization organized by path hierarchy (not a flat table). Drif
 ### Config View
 
 Generated output with diff against previous generation. Provider config fields pre-filled from last generation parameters (last-value defaults). If drift is detected, the regenerated config is already computed and shown as a diff. User decision is "accept this" or "not yet."
+
+### Applications Page
+
+Table of all applications with name, description, route count, tags, public/shareable toggle sliders, and creation date. Description is inline-editable. Toggles persist immediately. Shareable slider is disabled when public is off.
+
+### Public Hub
+
+Read-only public section at `/hub`. Lists all applications where `shareable == true`. No authentication required. Hub detail page at `/hub/:name` shows the full route treemap with search and a generate panel — pick a provider, fill config fields, generate output with copy button. Uses the same generation pipeline and snapshot storage as the authenticated app detail page.
 
 ### User Management
 
@@ -380,20 +414,19 @@ wagger/
         gcp.ex
         nginx.ex
         caddy.ex
+        coraza.ex
+        zap.ex
       snapshots/
         snapshot.ex
-        drift.ex
-      auth/
-        auth.ex
-        api_key.ex
-        webauthn.ex
-        http_sig.ex
+      drift.ex
+      events.ex                 — Comn.EventBus/EventLog integration
+      secrets.ex                — Comn.Secrets.Local encryption at rest
       accounts/
         user.ex
     wagger_web/
       plugs/
         api_version.ex
-        authenticate.ex
+        authenticate.ex         — sets Comn.Contexts per request
       controllers/
         application_controller.ex
         route_controller.ex
@@ -402,17 +435,16 @@ wagger/
         snapshot_controller.ex
         drift_controller.ex
         export_controller.ex
-        user_controller.ex
+        fallback_controller.ex  — handles Comn.Errors.ErrorStruct
       live/
         dashboard_live.ex
         app_detail_live.ex
-        config_live.ex
+        app_list_live.ex
+        hub_list_live.ex        — public Hub listing
+        hub_detail_live.ex      — public Hub detail + generate
         user_live.ex
       components/
-        drift_badge.ex
-        route_tree.ex
-        diff_view.ex
-        import_area.ex
+        wagger_components.ex
       router.ex
   yang/
     wagger-common.yang
@@ -422,6 +454,8 @@ wagger/
     wagger-gcp-armor.yang
     wagger-nginx.yang
     wagger-caddy.yang
+    wagger-coraza.yang
+    wagger-zap.yang
   priv/
     repo/
       migrations/

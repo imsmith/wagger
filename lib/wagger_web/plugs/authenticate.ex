@@ -5,7 +5,9 @@ defmodule WaggerWeb.Plugs.Authenticate do
   Extracts a Bearer token from the Authorization header and validates it
   against the stored API key hash via `Wagger.Accounts.authenticate_by_api_key/1`.
 
-  On success, assigns `current_user` to the conn and proceeds.
+  On success, assigns `current_user` and `request_id` to the conn and sets a
+  `Comn.Contexts` in the process dictionary with `request_id`, `user_id`, and
+  `actor` for downstream use by the generation pipeline and snapshot storage.
 
   On failure or missing header:
   - If `allow_setup: true` is passed as an option AND no users exist
@@ -40,11 +42,25 @@ defmodule WaggerWeb.Plugs.Authenticate do
   defp authenticate_token(conn, token) do
     case Accounts.authenticate_by_api_key(token) do
       {:ok, user} ->
-        assign(conn, :current_user, user)
+        request_id = generate_request_id()
 
-      :error ->
+        Comn.Contexts.new(%{
+          request_id: request_id,
+          user_id: to_string(user.id),
+          actor: user.username
+        })
+
+        conn
+        |> assign(:current_user, user)
+        |> assign(:request_id, request_id)
+
+      {:error, _} ->
         halt_unauthorized(conn)
     end
+  end
+
+  defp generate_request_id do
+    :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)
   end
 
   defp handle_missing_auth(conn, opts) do

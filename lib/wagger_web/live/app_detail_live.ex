@@ -156,6 +156,23 @@ defmodule WaggerWeb.AppDetailLive do
     {:noreply, assign(socket, :show_output, new_show)}
   end
 
+  @impl true
+  def handle_event("delete_provider_config", %{"provider" => provider}, socket) do
+    app = socket.assigns.app
+    Snapshots.delete_snapshots_for_provider(app, provider)
+
+    drifts = Map.new(@providers, fn p -> {p, Drift.detect(app, p)} end)
+    snapshots = load_latest_snapshots(app)
+
+    {:noreply,
+     socket
+     |> assign(:drifts, drifts)
+     |> assign(:snapshots, snapshots)
+     |> assign(:expanded_providers, MapSet.delete(socket.assigns.expanded_providers, provider))
+     |> assign(:show_output, MapSet.delete(socket.assigns.show_output, provider))
+     |> put_flash(:info, "#{String.capitalize(provider)} config deleted")}
+  end
+
   @provider_modules %{
     "nginx" => Wagger.Generator.Nginx,
     "aws" => Wagger.Generator.Aws,
@@ -221,6 +238,9 @@ defmodule WaggerWeb.AppDetailLive do
           |> assign(:expanded_providers, MapSet.put(socket.assigns.expanded_providers, provider))
           |> assign(:show_output, MapSet.put(socket.assigns.show_output, provider))
           |> put_flash(:info, "#{String.capitalize(provider)} config regenerated")}
+
+      {:error, %Comn.Errors.ErrorStruct{} = err} ->
+        {:noreply, put_flash(socket, :error, "Generation failed: #{err.message}")}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Generation failed: #{inspect(reason)}")}
@@ -392,7 +412,13 @@ defmodule WaggerWeb.AppDetailLive do
 
   defp load_latest_snapshots(app) do
     Map.new(@providers, fn provider ->
-      {provider, Snapshots.latest_snapshot(app, provider)}
+      snap = Snapshots.latest_snapshot(app, provider)
+
+      if snap do
+        {provider, %{snap | output: Snapshots.decrypt_output(snap)}}
+      else
+        {provider, nil}
+      end
     end)
   end
 

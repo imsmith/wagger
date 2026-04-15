@@ -43,8 +43,9 @@ defmodule Wagger.AccountsTest do
       assert found.username == "bob"
     end
 
-    test "returns :error for an invalid key" do
-      assert :error = Accounts.authenticate_by_api_key("notavalidkey")
+    test "returns error for an invalid key" do
+      assert {:error, %Comn.Errors.ErrorStruct{code: "wagger.accounts/auth_failed"}} =
+               Accounts.authenticate_by_api_key("notavalidkey")
     end
   end
 

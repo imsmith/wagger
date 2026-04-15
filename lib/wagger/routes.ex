@@ -82,6 +82,7 @@ defmodule Wagger.Routes do
 
     with {:ok, route} <- result do
       update_route_checksum(app)
+      Wagger.Events.route_changed(:created, route)
       {:ok, route}
     end
   end
@@ -100,6 +101,7 @@ defmodule Wagger.Routes do
     with {:ok, updated} <- result do
       app = Wagger.Applications.get_application!(updated.application_id)
       update_route_checksum(app)
+      Wagger.Events.route_changed(:updated, updated)
       {:ok, updated}
     end
   end
@@ -115,6 +117,7 @@ defmodule Wagger.Routes do
     with {:ok, deleted} <- result do
       app = Wagger.Applications.get_application!(deleted.application_id)
       update_route_checksum(app)
+      Wagger.Events.route_changed(:deleted, deleted)
       {:ok, deleted}
     end
   end

@@ -58,10 +58,13 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <button type="submit" class="text-xs bg-base-200 text-base-content px-3 py-1 rounded border border-neutral hover:border-primary cursor-pointer">
-              Preview
+            <button type="submit" disabled={@loading == :preview} class={"text-xs bg-base-200 text-base-content px-3 py-1 rounded border border-neutral hover:border-primary cursor-pointer #{if @loading == :preview, do: "opacity-50 cursor-wait"}"}>
+              <%= if @loading == :preview, do: "Parsing...", else: "Preview" %>
             </button>
             <span class="text-xs text-[color:var(--tn-text-muted)]">paste, drop a file, or browse</span>
+            <%= if @loading == :preview do %>
+              <span class="text-xs text-primary animate-pulse">Processing specification...</span>
+            <% end %>
           </div>
         </form>
 
@@ -81,9 +84,16 @@
                     class="bg-base-100 border border-neutral rounded px-2 py-1.5 text-sm text-base-content font-mono focus:border-primary focus:outline-none"
                   />
                 </div>
-                <button type="submit" class="bg-primary text-primary-content px-4 py-1.5 rounded text-xs font-bold hover:opacity-90 cursor-pointer">
-                  Create with <%= length(@new_app_preview.parsed) %> routes
+                <button type="submit" disabled={@loading == :creating} class={"bg-primary text-primary-content px-4 py-1.5 rounded text-xs font-bold hover:opacity-90 cursor-pointer #{if @loading == :creating, do: "opacity-50 cursor-wait"}"}>
+                  <%= if @loading == :creating do %>
+                    Creating...
+                  <% else %>
+                    Create with <%= length(@new_app_preview.parsed) %> routes
+                  <% end %>
                 </button>
+                <%= if @loading == :creating do %>
+                  <span class="text-xs text-primary animate-pulse">Importing routes...</span>
+                <% end %>
               </div>
             </form>
 

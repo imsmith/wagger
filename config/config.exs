@@ -56,6 +56,11 @@ config :mime, :types, %{
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Use Tidewave for live reloading in development
+config :phoenix_live_view,
+  debug_heex_annotations: true,
+  debug_attributes: true
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

@@ -146,6 +146,9 @@ defmodule WaggerWeb.HubDetailLive do
 
         {:noreply, assign(socket, :generated_output, output)}
 
+      {:error, %Comn.Errors.ErrorStruct{} = err} ->
+        {:noreply, put_flash(socket, :error, "Generation failed: #{err.message}")}
+
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Generation failed: #{inspect(reason)}")}
     end
@@ -153,5 +156,6 @@ defmodule WaggerWeb.HubDetailLive do
 
   # -- Helpers --
 
+  @doc "Returns provider-specific configuration field definitions for the generate form."
   def config_fields_for(provider), do: Map.get(@provider_config_fields, provider, [])
 end

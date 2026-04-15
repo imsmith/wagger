@@ -56,6 +56,19 @@ defmodule WaggerWeb.AppListLive do
     {:noreply, assign(socket, :editing_description, nil)}
   end
 
+  @impl true
+  def handle_event("delete_app", %{"id" => id}, socket) do
+    app = Applications.get_application!(String.to_integer(id))
+
+    case Applications.delete_application(app) do
+      {:ok, _} ->
+        {:noreply, assign(socket, :apps, load_apps())}
+
+      {:error, %Comn.Errors.ErrorStruct{} = err} ->
+        {:noreply, put_flash(socket, :error, err.message)}
+    end
+  end
+
   defp load_apps do
     Applications.list_applications()
     |> Enum.map(fn app ->

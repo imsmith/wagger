@@ -23,7 +23,7 @@ defmodule WaggerWeb.SnapshotJSON do
     |> summary()
     |> Map.merge(%{
       config_params: snapshot.config_params,
-      output: snapshot.output
+      output: Wagger.Snapshots.decrypt_output(snapshot)
     })
   end
 end

@@ -12,6 +12,7 @@
           <th class="bg-base-100 font-semibold text-center">Public</th>
           <th class="bg-base-100 font-semibold text-center">Shareable</th>
           <th class="bg-base-100 font-semibold">Created</th>
+          <th class="bg-base-100"></th>
         </tr>
       </thead>
       <tbody>
@@ -87,11 +88,23 @@
             <td class="text-[color:var(--tn-text-muted)] text-xs font-mono">
               <%= String.slice(app.inserted_at, 0, 10) %>
             </td>
+            <td class="text-right">
+              <%= unless Wagger.Applications.protected?(app) do %>
+                <button
+                  phx-click="delete_app"
+                  phx-value-id={app.id}
+                  data-confirm={"Delete #{app.name}? This will remove all routes and snapshots. Cannot be undone."}
+                  class="btn btn-xs btn-error btn-outline"
+                >
+                  delete
+                </button>
+              <% end %>
+            </td>
           </tr>
         <% end %>
         <%= if @apps == [] do %>
           <tr>
-            <td colspan="7" class="text-center text-[color:var(--tn-text-muted)] py-8 text-sm">
+            <td colspan="8" class="text-center text-[color:var(--tn-text-muted)] py-8 text-sm">
               No applications yet.
             </td>
           </tr>
