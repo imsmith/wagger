@@ -41,7 +41,7 @@ defmodule Wagger.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:comn, path: "../comn"},
+      {:comn, git: "https://github.com/imsmith/comn.git", tag: "v0.5.0"},
       {:tidewave, "~> 0.5", only: :dev},
       {:phoenix, "~> 1.8.4"},
       {:phoenix_ecto, "~> 4.5"},
@@ -66,7 +66,7 @@ defmodule Wagger.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:eden, "~> 2.1"},
-      {:ex_yang, path: "../ex_yang"}
+      {:ex_yang, git: "https://github.com/imsmith/ex_yang.git", branch: "main"}
     ]
   end
 
