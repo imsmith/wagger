@@ -1,0 +1,13 @@
+_build/
+deps/
+.git/
+.superpowers/
+*.db
+*.db-*
+priv/secrets/
+priv/static/assets/
+.env
+.env.*
+tmp/
+cover/
+doc/
