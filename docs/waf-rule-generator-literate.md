@@ -1,4 +1,4 @@
-# Wagger:  A Literate Program
+# Wagger
 
 *A provider-agnostic route-to-policy compiler for Web Application Firewall configurations, written in Elixir.*
 
