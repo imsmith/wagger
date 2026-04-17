@@ -59,4 +59,15 @@ defmodule Wagger.Generator.Mcp.CanonicalTest do
       assert name in identity_names, "missing identity: #{name}"
     end
   end
+
+  test "Builder @canonical_revision matches canonical yang/mcp.yang revision", %{source: source} do
+    {:ok, parsed} = ExYang.parse(source)
+    [canonical_rev | _] = parsed.revisions
+    # Module attribute is private; read via the emitted Import statement shape
+    # by building a tiny module and pulling the revision_date off the import.
+    {:ok, module} = Wagger.Generator.Mcp.Builder.build_module(%{app_name: "probe"}, %{})
+    [%ExYang.Model.Import{revision_date: emitted}] = module.imports
+    assert emitted == canonical_rev.date,
+           "Builder.@canonical_revision (#{emitted}) drifted from yang/mcp.yang revision (#{canonical_rev.date})"
+  end
 end

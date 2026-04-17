@@ -41,12 +41,20 @@ defmodule Wagger.Generator do
   Returns `{:ok, output_string}` on success or `{:error, reason}` on failure.
   """
   def generate(provider_module, input, config) do
-    Code.ensure_loaded(provider_module)
+    case Code.ensure_loaded(provider_module) do
+      {:module, _} ->
+        if function_exported?(provider_module, :map_capabilities, 2) do
+          generate_capabilities(provider_module, input, config)
+        else
+          generate_routes(provider_module, input, config)
+        end
 
-    if function_exported?(provider_module, :map_capabilities, 2) do
-      generate_capabilities(provider_module, input, config)
-    else
-      generate_routes(provider_module, input, config)
+      {:error, reason} ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/unknown_provider",
+           message: "Could not load provider module #{inspect(provider_module)}: #{inspect(reason)}",
+           field: "provider"
+         )}
     end
   end
 
