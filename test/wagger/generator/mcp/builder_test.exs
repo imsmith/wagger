@@ -105,6 +105,28 @@ defmodule Wagger.Generator.Mcp.BuilderTest do
     end
   end
 
+  describe "build_resources_container/1" do
+    test "empty resources list produces empty container" do
+      container = Builder.build_resources_container([])
+      assert %ExYang.Model.Container{name: "resources", body: []} = container
+    end
+
+    test "single resource produces a list entry with uses mcp:resource-definition" do
+      resources = [
+        %{uri_template: "file://{path}", name: "file", mime_type: "text/plain"}
+      ]
+
+      container = Builder.build_resources_container(resources)
+      assert [list_entry] = container.body
+      assert %ExYang.Model.List{name: "resource", key: "uri-template"} = list_entry
+
+      assert Enum.any?(list_entry.body, fn
+               %ExYang.Model.Uses{grouping: "mcp:resource-definition"} -> true
+               _ -> false
+             end)
+    end
+  end
+
   describe "derive_identity/1" do
     test "derives module_name, namespace, and prefix from app_name" do
       assert %{

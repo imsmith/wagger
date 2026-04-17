@@ -109,6 +109,32 @@ defmodule Wagger.Generator.Mcp.Builder do
   end
 
   @doc """
+  Builds the `resources` container projecting declared resources through
+  `mcp:resource-definition` groupings.
+  """
+  def build_resources_container(resources) when is_list(resources) do
+    %ExYang.Model.Container{
+      name: "resources",
+      description: "Declared MCP resources.",
+      body:
+        Enum.map(resources, fn resource ->
+          %ExYang.Model.List{
+            name: "resource",
+            key: "uri-template",
+            body: [
+              %ExYang.Model.Leaf{
+                name: "uri-template",
+                type: %ExYang.Model.Type{name: "string"},
+                default: Map.fetch!(resource, :uri_template)
+              },
+              %ExYang.Model.Uses{grouping: "mcp:resource-definition"}
+            ]
+          }
+        end)
+    }
+  end
+
+  @doc """
   Derives YANG module identity from the `app_name` per wagger convention.
 
   - `module_name = "\#{app_name}-mcp"`
