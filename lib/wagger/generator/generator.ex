@@ -13,6 +13,9 @@ defmodule Wagger.Generator do
   3. Validate the instance against the YANG schema
   4. Call `serialize/2` to produce the output string
 
+  Capability-shaped providers (e.g. MCP) implement `map_capabilities/2` instead of
+  `map_routes/2` + `serialize/2`. `generate/3` dispatches on which callback is exported.
+
   Errors from any stage are wrapped in `Comn.Errors.ErrorStruct` with appropriate
   categories (`:validation` for schema violations, `:internal` for unexpected failures).
   """
@@ -26,12 +29,25 @@ defmodule Wagger.Generator do
   @doc "Converts a validated instance tree to the provider's native configuration format."
   @callback serialize(instance :: map(), schema :: struct()) :: String.t()
 
+  @doc "Alternative entry point for capability-shaped providers (e.g. MCP). Returns `{:ok, %ExYang.Model.Module{}}` on success; the orchestrator encodes it and round-trip-validates."
+  @callback map_capabilities(capabilities :: map(), config :: map()) ::
+              {:ok, ExYang.Model.Module.t()} | {:error, term()}
+  @optional_callbacks map_capabilities: 2, map_routes: 2, serialize: 2
+
   @doc """
   Generates WAF configuration for the given provider module.
 
   Returns `{:ok, output_string}` on success or `{:error, reason}` on failure.
   """
-  def generate(provider_module, routes, config) do
+  def generate(provider_module, input, config) do
+    if function_exported?(provider_module, :map_capabilities, 2) do
+      generate_capabilities(provider_module, input, config)
+    else
+      generate_routes(provider_module, input, config)
+    end
+  end
+
+  defp generate_routes(provider_module, routes, config) do
     yang_source = provider_module.yang_module()
 
     with {:ok, parsed} <- ExYang.parse(yang_source),
@@ -58,6 +74,77 @@ defmodule Wagger.Generator do
         {:error,
          Comn.Errors.Registry.error!("wagger.generator/yang_resolve_failed",
            message: inspect(reason)
+         )}
+    end
+  end
+
+  defp generate_capabilities(provider_module, capabilities, config) do
+    canonical_source = provider_module.yang_module()
+
+    with {:ok, canonical_parsed} <- parse_canonical(canonical_source),
+         {:ok, canonical_resolved} <- resolve_canonical(canonical_parsed),
+         {:ok, module_struct} <- provider_module.map_capabilities(capabilities, config),
+         {:ok, yang_text} <- encode_module(module_struct),
+         {:ok, reparsed} <- reparse(yang_text),
+         {:ok, _} <- reresolve(reparsed, canonical_resolved) do
+      {:ok, yang_text}
+    end
+  end
+
+  defp parse_canonical(source) do
+    case ExYang.parse(source) do
+      {:ok, parsed} ->
+        {:ok, parsed}
+
+      {:error, reason} ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/canonical_mcp_invalid",
+           message: "parse failed: #{inspect(reason)}"
+         )}
+    end
+  end
+
+  defp resolve_canonical(parsed) do
+    case ExYang.resolve(parsed, %{}) do
+      {:ok, resolved} ->
+        {:ok, resolved}
+
+      {:error, reason} ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/canonical_mcp_invalid",
+           message: "resolve failed: #{inspect(reason)}"
+         )}
+    end
+  end
+
+  defp encode_module(module_struct) do
+    ExYang.Encoder.Encoder.encode(module_struct)
+  end
+
+  defp reparse(yang_text) do
+    case ExYang.parse(yang_text) do
+      {:ok, parsed} ->
+        {:ok, parsed}
+
+      {:error, reason} ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/mcp_roundtrip_failed",
+           message: "reparse failed: #{inspect(reason)}"
+         )}
+    end
+  end
+
+  defp reresolve(parsed, canonical_resolved) do
+    registry = %{canonical_resolved.module.name => canonical_resolved.module}
+
+    case ExYang.resolve(parsed, registry) do
+      {:ok, resolved} ->
+        {:ok, resolved}
+
+      {:error, reason} ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/mcp_roundtrip_failed",
+           message: "reresolve failed: #{inspect(reason)}"
          )}
     end
   end
