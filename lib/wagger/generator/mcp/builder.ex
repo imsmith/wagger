@@ -83,6 +83,32 @@ defmodule Wagger.Generator.Mcp.Builder do
   end
 
   @doc """
+  Builds the `tools` container projecting declared tools through
+  `mcp:tool-definition` groupings.
+  """
+  def build_tools_container(tools) when is_list(tools) do
+    %ExYang.Model.Container{
+      name: "tools",
+      description: "Declared MCP tools.",
+      body:
+        Enum.map(tools, fn tool ->
+          %ExYang.Model.List{
+            name: "tool",
+            key: "name",
+            body: [
+              %ExYang.Model.Leaf{
+                name: "name",
+                type: %ExYang.Model.Type{name: "string"},
+                default: Map.fetch!(tool, :name)
+              },
+              %ExYang.Model.Uses{grouping: "mcp:tool-definition"}
+            ]
+          }
+        end)
+    }
+  end
+
+  @doc """
   Derives YANG module identity from the `app_name` per wagger convention.
 
   - `module_name = "\#{app_name}-mcp"`

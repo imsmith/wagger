@@ -63,6 +63,48 @@ defmodule Wagger.Generator.Mcp.BuilderTest do
     end
   end
 
+  describe "build_tools_container/1" do
+    test "empty tools list produces empty container" do
+      container = Builder.build_tools_container([])
+
+      assert %ExYang.Model.Container{name: "tools"} = container
+      assert container.body == []
+    end
+
+    test "single tool produces a list entry with uses mcp:tool-definition" do
+      tools = [
+        %{
+          name: "search",
+          description: "Full-text search",
+          input_schema: %{"type" => "object"},
+          output_schema: %{"type" => "object"}
+        }
+      ]
+
+      container = Builder.build_tools_container(tools)
+
+      assert %ExYang.Model.Container{name: "tools"} = container
+      assert [list_entry] = container.body
+      assert %ExYang.Model.List{name: "tool", key: "name"} = list_entry
+
+      assert Enum.any?(list_entry.body, fn
+               %ExYang.Model.Leaf{name: "name"} -> true
+               _ -> false
+             end)
+
+      assert Enum.any?(list_entry.body, fn
+               %ExYang.Model.Uses{grouping: "mcp:tool-definition"} -> true
+               _ -> false
+             end)
+    end
+
+    test "multiple tools produce multiple list entries" do
+      tools = [%{name: "a"}, %{name: "b"}, %{name: "c"}]
+      container = Builder.build_tools_container(tools)
+      assert length(container.body) == 3
+    end
+  end
+
   describe "derive_identity/1" do
     test "derives module_name, namespace, and prefix from app_name" do
       assert %{
