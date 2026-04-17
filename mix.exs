@@ -66,7 +66,7 @@ defmodule Wagger.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:eden, "~> 2.1"},
-      {:ex_yang, git: "https://github.com/imsmith/ex_yang.git", branch: "main"}
+      {:ex_yang, git: "https://github.com/imsmith/ex_yang.git", branch: "fix/grammar-atom-table-timing"}
     ]
   end
 

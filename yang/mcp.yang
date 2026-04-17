@@ -1,0 +1,252 @@
+module mcp {
+  yang-version 1.1;
+  namespace "urn:ietf:params:xml:ns:yang:mcp";
+  prefix mcp;
+
+  organization "Wagger";
+  contact "https://github.com/smithisms/wagger";
+  description
+    "YANG model for the Model Context Protocol (MCP).
+
+     Models the protocol envelope, capability negotiation, lifecycle RPCs,
+     notifications, and transport identities. Dynamic per-tool JSON Schema
+     is represented as anydata; concrete typed refinement is expected in
+     per-application modules that import this one.";
+  reference "https://modelcontextprotocol.io/specification/2025-06-18";
+
+  revision 2025-06-18 {
+    description "Aligned with MCP specification revision 2025-06-18.";
+  }
+
+  // -- Transport identities --
+
+  identity transport {
+    description "Base identity for MCP transports.";
+  }
+
+  identity stdio {
+    base transport;
+    description "stdio transport (MCP §Transports).";
+  }
+
+  identity streamable-http {
+    base transport;
+    description "Streamable HTTP transport.";
+  }
+
+  identity sse {
+    base transport;
+    description "Server-Sent Events transport (legacy).";
+  }
+
+  // -- Core groupings --
+
+  grouping tool-definition {
+    description "Shape of a single MCP tool declaration.";
+    leaf name {
+      type string;
+      mandatory true;
+      description "Unique tool name within the server.";
+    }
+    leaf title {
+      type string;
+      description "Human-readable tool title.";
+    }
+    leaf description {
+      type string;
+      description "Human-readable tool description.";
+    }
+    anydata input-schema {
+      description "JSON Schema for tool input (draft 2020-12).";
+    }
+    anydata output-schema {
+      description "JSON Schema for tool output (draft 2020-12).";
+    }
+  }
+
+  grouping resource-definition {
+    description "Shape of a single MCP resource declaration.";
+    leaf uri-template {
+      type string;
+      mandatory true;
+      description "RFC 6570 URI template for the resource.";
+    }
+    leaf name {
+      type string;
+      description "Human-readable resource name.";
+    }
+    leaf title {
+      type string;
+      description "Human-readable resource title.";
+    }
+    leaf description {
+      type string;
+      description "Human-readable resource description.";
+    }
+    leaf mime-type {
+      type string;
+      description "MIME type of the resource content.";
+    }
+  }
+
+  grouping prompt-definition {
+    description "Shape of a single MCP prompt declaration.";
+    leaf name {
+      type string;
+      mandatory true;
+      description "Unique prompt name within the server.";
+    }
+    leaf title {
+      type string;
+      description "Human-readable prompt title.";
+    }
+    leaf description {
+      type string;
+      description "Human-readable prompt description.";
+    }
+    list arguments {
+      key "name";
+      description "Declared prompt arguments.";
+      leaf name {
+        type string;
+        mandatory true;
+      }
+      leaf description {
+        type string;
+      }
+      leaf required {
+        type boolean;
+        default "false";
+      }
+    }
+  }
+
+  grouping capabilities {
+    description "Server capability negotiation flags (MCP §Capabilities).";
+    container tools {
+      leaf list-changed { type boolean; default "false"; }
+    }
+    container resources {
+      leaf list-changed { type boolean; default "false"; }
+      leaf subscribe { type boolean; default "false"; }
+    }
+    container prompts {
+      leaf list-changed { type boolean; default "false"; }
+    }
+    container logging {
+      presence "server supports logging";
+    }
+  }
+
+  grouping server-info {
+    description "Server identification returned from initialize.";
+    leaf name { type string; mandatory true; }
+    leaf version { type string; mandatory true; }
+  }
+
+  // -- Lifecycle RPCs --
+
+  rpc initialize {
+    description "Client-to-server initialize handshake.";
+    input {
+      leaf protocol-version { type string; mandatory true; }
+      container client-info {
+        leaf name { type string; }
+        leaf version { type string; }
+      }
+      anydata client-capabilities;
+    }
+    output {
+      leaf protocol-version { type string; mandatory true; }
+      container server-info {
+        uses server-info;
+      }
+      container capabilities {
+        uses capabilities;
+      }
+    }
+  }
+
+  rpc ping {
+    description "Liveness probe.";
+  }
+
+  rpc tools-list {
+    description "List available tools (JSON-RPC method tools/list).";
+    output {
+      list tools {
+        key "name";
+        uses tool-definition;
+      }
+    }
+  }
+
+  rpc tools-call {
+    description "Invoke a tool (JSON-RPC method tools/call).";
+    input {
+      leaf name { type string; mandatory true; }
+      anydata arguments;
+    }
+    output {
+      anydata content;
+      leaf is-error { type boolean; default "false"; }
+    }
+  }
+
+  rpc resources-list {
+    description "List available resources (JSON-RPC method resources/list).";
+    output {
+      list resources {
+        key "uri-template";
+        uses resource-definition;
+      }
+    }
+  }
+
+  rpc resources-read {
+    description "Read a resource (JSON-RPC method resources/read).";
+    input {
+      leaf uri { type string; mandatory true; }
+    }
+    output {
+      anydata contents;
+    }
+  }
+
+  rpc prompts-list {
+    description "List available prompts (JSON-RPC method prompts/list).";
+    output {
+      list prompts {
+        key "name";
+        uses prompt-definition;
+      }
+    }
+  }
+
+  rpc prompts-get {
+    description "Render a prompt (JSON-RPC method prompts/get).";
+    input {
+      leaf name { type string; mandatory true; }
+      anydata arguments;
+    }
+    output {
+      leaf description { type string; }
+      anydata messages;
+    }
+  }
+
+  // -- Notifications --
+
+  notification tools-list-changed {
+    description "Server announces the tool list changed.";
+  }
+
+  notification resources-updated {
+    description "Server announces a resource was updated.";
+    leaf uri { type string; mandatory true; }
+  }
+
+  notification prompts-list-changed {
+    description "Server announces the prompt list changed.";
+  }
+}
