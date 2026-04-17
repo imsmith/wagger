@@ -41,6 +41,8 @@ defmodule Wagger.Generator do
   Returns `{:ok, output_string}` on success or `{:error, reason}` on failure.
   """
   def generate(provider_module, input, config) do
+    Code.ensure_loaded(provider_module)
+
     if function_exported?(provider_module, :map_capabilities, 2) do
       generate_capabilities(provider_module, input, config)
     else
