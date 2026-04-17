@@ -127,6 +127,28 @@ defmodule Wagger.Generator.Mcp.BuilderTest do
     end
   end
 
+  describe "build_prompts_container/1" do
+    test "empty prompts list produces empty container" do
+      container = Builder.build_prompts_container([])
+      assert %ExYang.Model.Container{name: "prompts", body: []} = container
+    end
+
+    test "single prompt produces a list entry with uses mcp:prompt-definition" do
+      prompts = [
+        %{name: "summarize", arguments: [%{name: "length", required: true}]}
+      ]
+
+      container = Builder.build_prompts_container(prompts)
+      assert [list_entry] = container.body
+      assert %ExYang.Model.List{name: "prompt", key: "name"} = list_entry
+
+      assert Enum.any?(list_entry.body, fn
+               %ExYang.Model.Uses{grouping: "mcp:prompt-definition"} -> true
+               _ -> false
+             end)
+    end
+  end
+
   describe "derive_identity/1" do
     test "derives module_name, namespace, and prefix from app_name" do
       assert %{

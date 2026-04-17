@@ -135,6 +135,32 @@ defmodule Wagger.Generator.Mcp.Builder do
   end
 
   @doc """
+  Builds the `prompts` container projecting declared prompts through
+  `mcp:prompt-definition` groupings.
+  """
+  def build_prompts_container(prompts) when is_list(prompts) do
+    %ExYang.Model.Container{
+      name: "prompts",
+      description: "Declared MCP prompts.",
+      body:
+        Enum.map(prompts, fn prompt ->
+          %ExYang.Model.List{
+            name: "prompt",
+            key: "name",
+            body: [
+              %ExYang.Model.Leaf{
+                name: "name",
+                type: %ExYang.Model.Type{name: "string"},
+                default: Map.fetch!(prompt, :name)
+              },
+              %ExYang.Model.Uses{grouping: "mcp:prompt-definition"}
+            ]
+          }
+        end)
+    }
+  end
+
+  @doc """
   Derives YANG module identity from the `app_name` per wagger convention.
 
   - `module_name = "\#{app_name}-mcp"`
