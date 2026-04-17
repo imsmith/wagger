@@ -53,3 +53,6 @@ npm-debug.log
 # Superpowers brainstorming scratch
 .superpowers/
 
+# Git worktrees
+.worktrees/
+
