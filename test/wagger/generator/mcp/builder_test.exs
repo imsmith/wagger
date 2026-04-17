@@ -62,4 +62,22 @@ defmodule Wagger.Generator.Mcp.BuilderTest do
       assert :ok = Builder.validate(%{app_name: "my-app"})
     end
   end
+
+  describe "derive_identity/1" do
+    test "derives module_name, namespace, and prefix from app_name" do
+      assert %{
+               module_name: "my-app-mcp",
+               namespace: "urn:wagger:my-app:mcp",
+               prefix: "my-app"
+             } = Builder.derive_identity(%{app_name: "my-app"})
+    end
+
+    test "handles single-word app names" do
+      assert %{
+               module_name: "acme-mcp",
+               namespace: "urn:wagger:acme:mcp",
+               prefix: "acme"
+             } = Builder.derive_identity(%{app_name: "acme"})
+    end
+  end
 end

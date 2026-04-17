@@ -81,4 +81,19 @@ defmodule Wagger.Generator.Mcp.Builder do
       [name | _] -> {:error, {:duplicate, collection, name}}
     end
   end
+
+  @doc """
+  Derives YANG module identity from the `app_name` per wagger convention.
+
+  - `module_name = "\#{app_name}-mcp"`
+  - `namespace = "urn:wagger:\#{app_name}:mcp"`
+  - `prefix = app_name`
+  """
+  def derive_identity(%{app_name: app_name}) do
+    %{
+      module_name: "#{app_name}-mcp",
+      namespace: "urn:wagger:#{app_name}:mcp",
+      prefix: app_name
+    }
+  end
 end
