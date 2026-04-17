@@ -166,4 +166,48 @@ defmodule Wagger.Generator.Mcp.BuilderTest do
              } = Builder.derive_identity(%{app_name: "acme"})
     end
   end
+
+  describe "build_module/2" do
+    test "returns error on invalid capabilities" do
+      assert {:error, {:missing, "app_name"}} = Builder.build_module(%{}, %{})
+    end
+
+    test "returns an ExYang.Model.Module struct with derived identity" do
+      caps = %{app_name: "my-app"}
+      assert {:ok, module} = Builder.build_module(caps, %{})
+      assert %ExYang.Model.Module{} = module
+      assert module.name == "my-app-mcp"
+      assert module.namespace == "urn:wagger:my-app:mcp"
+      assert module.prefix == "my-app"
+    end
+
+    test "imports mcp with revision 2025-06-18" do
+      caps = %{app_name: "my-app"}
+      {:ok, module} = Builder.build_module(caps, %{})
+      assert [%ExYang.Model.Import{module: "mcp", prefix: "mcp", revision_date: "2025-06-18"}] =
+               module.imports
+    end
+
+    test "includes a revision entry" do
+      caps = %{app_name: "my-app"}
+      {:ok, module} = Builder.build_module(caps, %{})
+      assert [%ExYang.Model.Revision{} = rev] = module.revisions
+      assert rev.description =~ "wagger"
+    end
+
+    test "body contains the three primitive containers" do
+      caps = %{
+        app_name: "my-app",
+        tools: [%{name: "search"}],
+        resources: [%{uri_template: "x://{y}"}],
+        prompts: [%{name: "p"}]
+      }
+
+      {:ok, module} = Builder.build_module(caps, %{})
+      names = Enum.map(module.body, & &1.name)
+      assert "tools" in names
+      assert "resources" in names
+      assert "prompts" in names
+    end
+  end
 end
