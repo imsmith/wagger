@@ -26,6 +26,15 @@ defmodule Wagger.Errors do
   register_error "wagger.generator/serialization_failed", :internal,
     message: "Failed to serialize provider config"
 
+  register_error "wagger.generator/invalid_capabilities", :validation,
+    message: "Capability map is malformed"
+
+  register_error "wagger.generator/mcp_roundtrip_failed", :internal,
+    message: "Generated MCP YANG failed round-trip validation"
+
+  register_error "wagger.generator/canonical_mcp_invalid", :internal,
+    message: "Canonical mcp.yang failed to parse or resolve"
+
   # -- Accounts --
 
   register_error "wagger.accounts/user_creation_failed", :validation,
