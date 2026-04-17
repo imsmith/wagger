@@ -29,9 +29,10 @@ defmodule Wagger.Generator do
   @doc "Converts a validated instance tree to the provider's native configuration format."
   @callback serialize(instance :: map(), schema :: struct()) :: String.t()
 
-  @doc "Alternative entry point for capability-shaped providers (e.g. MCP). Returns `{:ok, %ExYang.Model.Module{}}` on success; the orchestrator encodes it and round-trip-validates."
+  @doc "Alternative entry point for capability-shaped providers (e.g. MCP). Returns `{:ok, yang_text}` on success; the orchestrator encodes it and round-trip-validates. Returns `{:error, term()}` on any pipeline failure."
   @callback map_capabilities(capabilities :: map(), config :: map()) ::
               {:ok, ExYang.Model.Module.t()} | {:error, term()}
+
   @optional_callbacks map_capabilities: 2, map_routes: 2, serialize: 2
 
   @doc """
@@ -88,6 +89,8 @@ defmodule Wagger.Generator do
          {:ok, reparsed} <- reparse(yang_text),
          {:ok, _} <- reresolve(reparsed, canonical_resolved) do
       {:ok, yang_text}
+    else
+      {:error, _} = err -> err
     end
   end
 
