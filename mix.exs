@@ -68,7 +68,8 @@ defmodule Wagger.MixProject do
       {:eden, "~> 2.1"},
       # Pinned to fork-branch combining atom-table timing fix and rpc extensions
       # capture. Flip back to main once both fixes are upstream in ex_yang.
-      {:ex_yang, git: "https://github.com/imsmith/ex_yang.git", branch: "fix/rpc-extensions"}
+      {:ex_yang, git: "https://github.com/imsmith/ex_yang.git", branch: "fix/rpc-extensions"},
+      {:busybody, path: "../busybody", only: :dev}
     ]
   end
 

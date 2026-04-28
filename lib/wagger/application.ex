@@ -18,7 +18,7 @@ defmodule Wagger.Application do
       # {Wagger.Worker, arg},
       # Start to serve requests, typically the last entry
       WaggerWeb.Endpoint
-    ]
+    ] ++ busybody_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
@@ -43,4 +43,13 @@ defmodule Wagger.Application do
     # By default, sqlite migrations are run when using a release
     System.get_env("RELEASE_NAME") == nil
   end
+
+  defp busybody_children do
+    if Code.ensure_loaded?(Busybody.Client) do
+      [{Busybody.Client, name: "Wagger", endpoint: WaggerWeb.Endpoint}]
+    else
+      []
+    end
+  end
+
 end
