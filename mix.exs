@@ -66,10 +66,9 @@ defmodule Wagger.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:eden, "~> 2.1"},
-      # Pinned to fork-branch for atom-table timing fix (RFC 7950 keyword atoms
-      # not seeded before first parse in fresh VM → intermittent test failures).
-      # Flip back to main after imsmith/ex_yang merges fix/grammar-atom-table-timing.
-      {:ex_yang, git: "https://github.com/imsmith/ex_yang.git", branch: "fix/grammar-atom-table-timing"}
+      # Pinned to fork-branch combining atom-table timing fix and rpc extensions
+      # capture. Flip back to main once both fixes are upstream in ex_yang.
+      {:ex_yang, git: "https://github.com/imsmith/ex_yang.git", branch: "fix/rpc-extensions"}
     ]
   end
 
