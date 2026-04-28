@@ -1,0 +1,55 @@
+module wagger-mcp-extensions {
+  yang-version 1.1;
+  namespace "urn:wagger:mcp-extensions";
+  prefix wagger-mcp;
+
+  organization "Wagger";
+  contact "https://github.com/imsmith/wagger";
+  description
+    "Annotation vocabulary for MCP capability projection. App YANG modules
+     use these extensions to mark which RPCs are MCP tools/prompts, which
+     containers and lists are resources, and to override LLM-facing names
+     and descriptions.";
+  reference "docs/superpowers/specs/2026-04-27-wagger-mcp-annotation-pipeline-design.md";
+
+  revision 2026-04-27 {
+    description "Initial vocabulary: 8 extensions for MCP capability annotation.";
+  }
+
+  extension tool-name {
+    argument name;
+    description "Override the auto-derived tool name on an `rpc`. Argument is the LLM-facing tool name (snake_case recommended).";
+  }
+
+  extension resource-template {
+    argument template;
+    description "Override the auto-derived URI template on a `list` or `container`. Argument is an RFC 6570 URI template string.";
+  }
+
+  extension prompt-name {
+    argument name;
+    description "Reclassify an `rpc` as an MCP prompt rather than a tool. Argument is the prompt name.";
+  }
+
+  extension description-for-llm {
+    argument text;
+    description "LLM-facing description, overrides the YANG `description` for MCP projection.";
+  }
+
+  extension mime-type {
+    argument type;
+    description "Resource MIME type. Defaults to `application/json` when absent.";
+  }
+
+  extension dangerous {
+    description "Marks a tool as requiring user confirmation in the host (no argument).";
+  }
+
+  extension read-only {
+    description "Marks a tool as side-effect-free, an MCP optimization hint (no argument).";
+  }
+
+  extension exclude {
+    description "Opt this node out of MCP exposure (no argument). Counters the default-on policy.";
+  }
+}
