@@ -46,4 +46,67 @@ defmodule Wagger.Generator.Mcp do
   defp field_for_reason({:missing, field}), do: field
   defp field_for_reason({:invalid_identifier, field, _}), do: field
   defp field_for_reason({:duplicate, collection, _}), do: collection
+
+  @extensions_resource Path.join([__DIR__, "..", "..", "..", "yang", "wagger-mcp-extensions.yang"])
+  @external_resource @extensions_resource
+  @extensions_source File.read!(@extensions_resource)
+
+  @doc """
+  End-to-end: annotated YANG source text + app_name → generated `my-app-mcp.yang`
+  source text plus a derivation report. Returns `{:ok, yang_text, report}` or
+  `{:error, ErrorStruct.t()}`.
+  """
+  def generate_from_yang(source, app_name) when is_binary(source) and is_binary(app_name) do
+    with {:ok, parsed} <- parse_app_yang(source),
+         {:ok, _resolved} <- resolve_app_yang(parsed),
+         {:ok, caps, report} <- derive_caps(parsed, app_name),
+         {:ok, module_struct} <- Builder.build_module(caps, %{}),
+         {:ok, yang_text} <- ExYang.Encoder.Encoder.encode(module_struct) do
+      {:ok, yang_text, report}
+    end
+  end
+
+  defp parse_app_yang(source) do
+    case ExYang.parse(source) do
+      {:ok, parsed} ->
+        {:ok, parsed}
+
+      {:error, reason} ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/yang_parse_failed",
+           message: inspect(reason)
+         )}
+    end
+  end
+
+  defp resolve_app_yang(parsed) do
+    {:ok, ext_parsed} = ExYang.parse(@extensions_source)
+    {:ok, ext_resolved} = ExYang.resolve(ext_parsed, %{})
+    registry = %{ext_resolved.module.name => ext_resolved.module}
+
+    case ExYang.resolve(parsed, registry) do
+      {:ok, resolved} ->
+        {:ok, resolved}
+
+      {:error, reason} ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/yang_resolve_failed",
+           message: inspect(reason)
+         )}
+    end
+  end
+
+  defp derive_caps(parsed, app_name) do
+    case Wagger.Generator.Mcp.Deriver.derive(parsed, app_name) do
+      {:ok, caps, report} ->
+        {:ok, caps, report}
+
+      {:error, errors} ->
+        {:error,
+         Comn.Errors.Registry.error!("wagger.generator/derivation_failed",
+           message: errors |> Enum.map_join("; ", & &1.message),
+           field: errors |> List.first() |> Map.get(:node)
+         )}
+    end
+  end
 end

@@ -1,0 +1,40 @@
+module notes-service {
+  yang-version 1.1;
+  namespace "urn:example:notes";
+  prefix notes;
+  import wagger-mcp-extensions { prefix wagger-mcp; }
+  revision 2026-04-27 { description "Initial."; }
+
+  rpc create-note {
+    wagger-mcp:dangerous;
+    description "Create a new note.";
+  }
+
+  rpc search-notes {
+    wagger-mcp:read-only;
+    wagger-mcp:description-for-llm "Full-text search across notes. Use when user asks to find by content.";
+    description "Search notes.";
+  }
+
+  rpc internal-vacuum {
+    wagger-mcp:exclude;
+    description "Internal maintenance, not LLM-callable.";
+  }
+
+  rpc summarize-notes {
+    wagger-mcp:prompt-name "summarize";
+    description "Summarize a set of notes.";
+  }
+
+  list notes {
+    key id;
+    leaf id { type string; }
+    leaf title { type string; }
+    leaf body { type string; }
+  }
+
+  container config {
+    description "Service configuration.";
+    leaf default-mime { type string; }
+  }
+}
