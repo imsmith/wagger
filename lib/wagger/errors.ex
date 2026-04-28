@@ -35,6 +35,9 @@ defmodule Wagger.Errors do
   register_error "wagger.generator/canonical_mcp_invalid", :internal,
     message: "Canonical mcp.yang failed to parse or resolve"
 
+  register_error "wagger.generator/derivation_failed", :validation,
+    message: "Could not derive MCP capabilities from annotated YANG"
+
   # -- Accounts --
 
   register_error "wagger.accounts/user_creation_failed", :validation,
