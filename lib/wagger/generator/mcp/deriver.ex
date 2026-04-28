@@ -29,4 +29,60 @@ defmodule Wagger.Generator.Mcp.Deriver do
       _ -> false
     end)
   end
+
+  @doc """
+  Returns `{tools, warnings}` for the given list of `%ExYang.Model.Rpc{}` nodes.
+  Excludes rpcs flagged with `wagger-mcp:exclude` or `wagger-mcp:prompt-name`.
+  """
+  def derive_tools(rpcs) when is_list(rpcs) do
+    rpcs
+    |> Enum.reduce({[], []}, fn rpc, {tools, warns} ->
+      cond do
+        extension_present?(rpc.extensions, "exclude") ->
+          {tools, warns}
+
+        extension_arg(rpc.extensions, "prompt-name") != nil ->
+          {tools, warns}
+
+        true ->
+          {tool, warns_for_tool} = build_tool(rpc)
+          {[tool | tools], warns ++ warns_for_tool}
+      end
+    end)
+    |> then(fn {tools, warns} -> {Enum.reverse(tools), warns} end)
+  end
+
+  defp build_tool(%ExYang.Model.Rpc{} = rpc) do
+    name = extension_arg(rpc.extensions, "tool-name") || kebab_to_snake(rpc.name)
+
+    {description, warns} =
+      case {extension_arg(rpc.extensions, "description-for-llm"), rpc.description} do
+        {nil, nil} ->
+          {rpc.name,
+           [
+             %{
+               node: "/rpcs/#{rpc.name}",
+               kind: :description_fallback,
+               message: "no description-for-llm or YANG description; using identifier"
+             }
+           ]}
+
+        {nil, yang_desc} ->
+          {yang_desc, []}
+
+        {llm_desc, _} ->
+          {llm_desc, []}
+      end
+
+    tool = %{
+      name: name,
+      description: description,
+      input_schema: %{"type" => "object"},
+      output_schema: %{"type" => "object"},
+      dangerous: extension_present?(rpc.extensions, "dangerous"),
+      read_only: extension_present?(rpc.extensions, "read-only")
+    }
+
+    {tool, warns}
+  end
 end
