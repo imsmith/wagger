@@ -131,4 +131,76 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       assert t1.name == t2.name
     end
   end
+
+  describe "derive_resources/1" do
+    test "auto-derives URI template from keyed list name and key leaf" do
+      list = %ExYang.Model.List{name: "notes", key: "id", body: []}
+      assert {[res], warns_or_errors} = Deriver.derive_resources([list])
+      assert res.uri_template == "notes://{id}"
+      assert res.name == "notes"
+      assert is_list(warns_or_errors)
+    end
+
+    test "resource-template extension overrides default" do
+      list = %ExYang.Model.List{
+        name: "notes",
+        key: "id",
+        body: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "resource-template"}, argument: "/api/notes/{id}"}]
+      }
+
+      assert {[res], _} = Deriver.derive_resources([list])
+      assert res.uri_template == "/api/notes/{id}"
+    end
+
+    test "list without key produces derivation error in errors output" do
+      list = %ExYang.Model.List{name: "notes", key: nil, body: []}
+      assert {[], errors} = Deriver.derive_resources([list])
+      assert Enum.any?(errors, &(&1.node == "/lists/notes" and &1.kind == :missing_key))
+    end
+
+    test "top-level container produces resource with simple URI" do
+      container = %ExYang.Model.Container{name: "config", body: []}
+      assert {[res], _} = Deriver.derive_resources([container])
+      assert res.uri_template == "config://"
+    end
+
+    test "exclude omits the node" do
+      list = %ExYang.Model.List{
+        name: "notes",
+        key: "id",
+        body: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "exclude"}, argument: nil}]
+      }
+
+      assert {[], []} = Deriver.derive_resources([list])
+    end
+
+    test "mime-type override" do
+      list = %ExYang.Model.List{
+        name: "files",
+        key: "path",
+        body: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "mime-type"}, argument: "application/octet-stream"}]
+      }
+
+      assert {[res], _} = Deriver.derive_resources([list])
+      assert res.mime_type == "application/octet-stream"
+    end
+
+    test "missing mime-type defaults to application/json with warning" do
+      list = %ExYang.Model.List{name: "notes", key: "id", body: []}
+      assert {[res], warns} = Deriver.derive_resources([list])
+      assert res.mime_type == "application/json"
+      assert Enum.any?(warns, &(&1.kind == :mime_type_default))
+    end
+
+    test "resource-template missing {var} on keyed list is an error" do
+      list = %ExYang.Model.List{
+        name: "notes",
+        key: "id",
+        body: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "resource-template"}, argument: "/api/notes"}]
+      }
+
+      assert {[], errors} = Deriver.derive_resources([list])
+      assert Enum.any?(errors, &(&1.kind == :uri_template_missing_var))
+    end
+  end
 end

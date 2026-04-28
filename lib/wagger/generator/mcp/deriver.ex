@@ -85,4 +85,106 @@ defmodule Wagger.Generator.Mcp.Deriver do
 
     {tool, warns}
   end
+
+  @doc """
+  Returns `{resources, issues}` where issues is a list of warning OR error maps.
+  Errors carry `kind: :missing_key | :uri_template_missing_var`. Warnings carry
+  `kind: :mime_type_default | :description_fallback`.
+  """
+  def derive_resources(nodes) when is_list(nodes) do
+    nodes
+    |> Enum.reduce({[], []}, fn node, {acc, issues} ->
+      cond do
+        excluded?(node) ->
+          {acc, issues}
+
+        true ->
+          case build_resource(node) do
+            {:ok, res, warns} -> {[res | acc], issues ++ warns}
+            {:error, err} -> {acc, issues ++ [err]}
+          end
+      end
+    end)
+    |> then(fn {acc, issues} -> {Enum.reverse(acc), issues} end)
+  end
+
+  defp excluded?(%{body: body}) when is_list(body), do: extension_present?(body, "exclude")
+  defp excluded?(_), do: false
+
+  defp body_extensions(%{body: body}) when is_list(body) do
+    Enum.filter(body, &match?(%ExYang.Model.ExtensionUse{keyword: {@prefix, _}}, &1))
+  end
+
+  defp body_extensions(_), do: []
+
+  defp build_resource(%ExYang.Model.List{name: name, key: nil}) do
+    {:error,
+     %{
+       node: "/lists/#{name}",
+       kind: :missing_key,
+       message: "list has no key; cannot auto-derive URI template"
+     }}
+  end
+
+  defp build_resource(%ExYang.Model.List{name: name, key: key} = list) do
+    exts = body_extensions(list)
+
+    case extension_arg(exts, "resource-template") do
+      nil ->
+        finalize_resource(list, "#{name}://{#{key}}", exts, "/lists/#{name}")
+
+      explicit ->
+        if String.contains?(explicit, "{") and String.contains?(explicit, "}") do
+          finalize_resource(list, explicit, exts, "/lists/#{name}")
+        else
+          {:error,
+           %{
+             node: "/lists/#{name}",
+             kind: :uri_template_missing_var,
+             message: "resource-template must contain at least one {var} for keyed list"
+           }}
+        end
+    end
+  end
+
+  defp build_resource(%ExYang.Model.Container{name: name} = container) do
+    exts = body_extensions(container)
+
+    template =
+      case extension_arg(exts, "resource-template") do
+        nil -> "#{name}://"
+        explicit -> explicit
+      end
+
+    finalize_resource(container, template, exts, "/containers/#{name}")
+  end
+
+  defp finalize_resource(node, template, exts, path) do
+    {mime, mime_warns} = mime_type_for(exts, path)
+
+    {:ok,
+     %{
+       uri_template: template,
+       name: node.name,
+       mime_type: mime,
+       description: node.description || node.name
+     }, mime_warns}
+  end
+
+  defp mime_type_for(exts, path) do
+    case extension_arg(exts, "mime-type") do
+      nil ->
+        {"application/json",
+         [
+           %{
+             node: path,
+             kind: :mime_type_default,
+             message: "no mime-type set; defaulting to application/json"
+           }
+         ]}
+
+      mime ->
+        {mime, []}
+    end
+  end
 end
