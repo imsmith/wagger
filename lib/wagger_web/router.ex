@@ -25,6 +25,7 @@ defmodule WaggerWeb.Router do
       live "/applications", AppListLive, :index
       live "/applications/:id", AppDetailLive, :show
       live "/users", UserLive, :index
+      live "/mcp", McpGeneratorLive, :index
     end
 
     live_session :hub, on_mount: [{WaggerWeb.Hooks.NavHook, :default}] do
