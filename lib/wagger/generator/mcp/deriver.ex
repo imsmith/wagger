@@ -187,4 +187,132 @@ defmodule Wagger.Generator.Mcp.Deriver do
         {mime, []}
     end
   end
+
+  @doc """
+  Returns `{prompts, warnings}`. Only rpcs with `wagger-mcp:prompt-name` are
+  prompts; exclude takes precedence.
+  """
+  def derive_prompts(rpcs) when is_list(rpcs) do
+    rpcs
+    |> Enum.reduce({[], []}, fn rpc, {acc, warns} ->
+      cond do
+        extension_present?(rpc.extensions, "exclude") ->
+          {acc, warns}
+
+        extension_arg(rpc.extensions, "prompt-name") == nil ->
+          {acc, warns}
+
+        true ->
+          {prompt, w} = build_prompt(rpc)
+          {[prompt | acc], warns ++ w}
+      end
+    end)
+    |> then(fn {acc, warns} -> {Enum.reverse(acc), warns} end)
+  end
+
+  defp build_prompt(%ExYang.Model.Rpc{} = rpc) do
+    name = extension_arg(rpc.extensions, "prompt-name")
+
+    {description, warns} =
+      case {extension_arg(rpc.extensions, "description-for-llm"), rpc.description} do
+        {nil, nil} ->
+          {rpc.name,
+           [
+             %{
+               node: "/rpcs/#{rpc.name}",
+               kind: :description_fallback,
+               message: "no description; using identifier"
+             }
+           ]}
+
+        {nil, d} ->
+          {d, []}
+
+        {d, _} ->
+          {d, []}
+      end
+
+    {%{name: name, description: description, arguments: []}, warns}
+  end
+
+  @doc """
+  Walks a parsed YANG module and produces a capability map plus a derivation
+  report. Returns `{:ok, capability_map, report}` or `{:error, [errors]}`.
+
+  `capability_map` is the shape consumed by `Wagger.Generator.Mcp.Builder.build_module/2`.
+  """
+  def derive(parsed_module, app_name) when is_binary(app_name) do
+    rpcs = parsed_module.rpcs || []
+    body = parsed_module.body || []
+
+    lists = Enum.filter(body, &match?(%ExYang.Model.List{}, &1))
+    containers = Enum.filter(body, &match?(%ExYang.Model.Container{}, &1))
+
+    {tools, tool_warns} = derive_tools(rpcs)
+    {resources, resource_issues} = derive_resources(lists ++ containers)
+    {prompts, prompt_warns} = derive_prompts(rpcs)
+
+    excluded_nodes = collect_excluded(rpcs, lists ++ containers)
+
+    {warnings, errors} = split_issues(resource_issues)
+    warnings = warnings ++ tool_warns ++ prompt_warns
+
+    duplicate_errors = check_duplicate_tools(tools)
+
+    case errors ++ duplicate_errors do
+      [] ->
+        caps = %{
+          app_name: app_name,
+          tools: tools,
+          resources: resources,
+          prompts: prompts
+        }
+
+        report = %{
+          tools_count: length(tools),
+          resources_count: length(resources),
+          prompts_count: length(prompts),
+          tools: tools,
+          resources: resources,
+          prompts: prompts,
+          warnings: warnings,
+          excluded: excluded_nodes
+        }
+
+        {:ok, caps, report}
+
+      es ->
+        {:error, es}
+    end
+  end
+
+  defp split_issues(issues) do
+    Enum.split_with(issues, fn %{kind: k} ->
+      k in [:mime_type_default, :description_fallback]
+    end)
+  end
+
+  defp collect_excluded(rpcs, body) do
+    rpc_excl =
+      for rpc <- rpcs, extension_present?(rpc.extensions, "exclude"), do: "/rpcs/#{rpc.name}"
+
+    body_excl =
+      for n <- body, excluded?(n) do
+        case n do
+          %ExYang.Model.List{name: name} -> "/lists/#{name}"
+          %ExYang.Model.Container{name: name} -> "/containers/#{name}"
+        end
+      end
+
+    rpc_excl ++ body_excl
+  end
+
+  defp check_duplicate_tools(tools) do
+    names = Enum.map(tools, & &1.name)
+    dups = names -- Enum.uniq(names)
+
+    Enum.map(Enum.uniq(dups), fn n ->
+      %{node: "/tools/#{n}", kind: :duplicate_tool_name, message: "duplicate tool name: #{n}"}
+    end)
+  end
 end

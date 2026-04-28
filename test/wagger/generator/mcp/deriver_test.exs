@@ -203,4 +203,83 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       assert Enum.any?(errors, &(&1.kind == :uri_template_missing_var))
     end
   end
+
+  describe "derive_prompts/1" do
+    test "rpc with prompt-name becomes a prompt" do
+      rpc = %ExYang.Model.Rpc{
+        name: "summarize",
+        description: "Summarize text.",
+        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "prompt-name"}, argument: "summarize"}]
+      }
+
+      assert {[prompt], _} = Deriver.derive_prompts([rpc])
+      assert prompt.name == "summarize"
+    end
+
+    test "rpc without prompt-name is excluded" do
+      rpc = %ExYang.Model.Rpc{name: "create-note", extensions: []}
+      assert {[], _} = Deriver.derive_prompts([rpc])
+    end
+
+    test "exclude takes precedence" do
+      rpc = %ExYang.Model.Rpc{
+        name: "summarize",
+        extensions: [
+          %ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "prompt-name"}, argument: "summarize"},
+          %ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "exclude"}, argument: nil}
+        ]
+      }
+
+      assert {[], _} = Deriver.derive_prompts([rpc])
+    end
+  end
+
+  describe "derive/2" do
+    test "produces a complete capability map and report from a parsed module" do
+      yang = """
+      module demo {
+        yang-version 1.1;
+        namespace "urn:demo";
+        prefix demo;
+        revision 2026-04-27 { description "x"; }
+        rpc create-note {
+          description "Save a note.";
+        }
+        list notes {
+          key id;
+          leaf id { type string; }
+        }
+        container config {
+        }
+      }
+      """
+
+      {:ok, parsed} = ExYang.parse(yang)
+      assert {:ok, caps, report} = Deriver.derive(parsed, "demo")
+      assert caps.app_name == "demo"
+      assert length(caps.tools) == 1
+      assert length(caps.resources) == 2
+      assert caps.prompts == []
+      assert report.tools_count == 1
+      assert report.resources_count == 2
+      assert report.prompts_count == 0
+    end
+
+    test "duplicate auto-derived tool names are reported as derivation_failed" do
+      yang = """
+      module dup {
+        yang-version 1.1;
+        namespace "urn:dup";
+        prefix dup;
+        revision 2026-04-27 { description "x"; }
+        rpc foo-bar { }
+        rpc foo_bar { }
+      }
+      """
+
+      {:ok, parsed} = ExYang.parse(yang)
+      assert {:error, errors} = Deriver.derive(parsed, "dup")
+      assert Enum.any?(errors, &(&1.kind == :duplicate_tool_name))
+    end
+  end
 end
