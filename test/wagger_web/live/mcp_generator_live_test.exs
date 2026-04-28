@@ -48,4 +48,13 @@ defmodule WaggerWeb.McpGeneratorLiveTest do
     assert html =~ "wagger.generator/yang_parse_failed"
     refute html =~ "/mcp/download/"
   end
+
+  test "submitting non-module text still parses-fails (no fallback path triggered)", %{conn: conn} do
+    # Sanity: parse fails before app_name detection is consulted on success path.
+    # Note: "// just a comment" hits an ex_yang crash bug (hd([])) rather than
+    # returning {:error, ...}; use "garbage" which does hit the error-return path.
+    {:ok, view, _} = live(conn, ~p"/mcp")
+    html = view |> form("#mcp-form", %{"yang_source" => "garbage"}) |> render_submit()
+    assert html =~ "wagger.generator/yang_parse_failed"
+  end
 end

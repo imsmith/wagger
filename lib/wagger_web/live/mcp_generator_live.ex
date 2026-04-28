@@ -15,7 +15,11 @@ defmodule WaggerWeb.McpGeneratorLive do
 
   @impl true
   def handle_event("generate", %{"yang_source" => source}, socket) do
-    app_name = derive_app_name(source)
+    {app_name, app_name_fallback?} =
+      case derive_app_name(source) do
+        {:ok, name} -> {name, false}
+        :fallback -> {"service", true}
+      end
 
     case Wagger.Generator.Mcp.generate_from_yang(source, app_name) do
       {:ok, yang_text, report} ->
@@ -30,7 +34,14 @@ defmodule WaggerWeb.McpGeneratorLive do
         {:noreply,
          assign(socket,
            result:
-             {:ok, %{yang_text: yang_text, report: report, filename: filename, token: token}},
+             {:ok,
+              %{
+                yang_text: yang_text,
+                report: report,
+                filename: filename,
+                token: token,
+                app_name_fallback?: app_name_fallback?
+              }},
            source: source
          )}
 
@@ -48,6 +59,12 @@ defmodule WaggerWeb.McpGeneratorLive do
   def ok_result(assigns) do
     ~H"""
     <section class="border rounded p-4 space-y-4">
+      <div :if={@result.app_name_fallback?} class="border-l-4 border-yellow-400 bg-yellow-50 p-3">
+        <p class="text-sm text-yellow-800">
+          Could not detect a <code>module &lt;name&gt;</code> declaration; defaulting to
+          <code>service-mcp.yang</code>. Check your YANG source.
+        </p>
+      </div>
       <h2 class="text-lg font-semibold">Derivation report</h2>
       <p class="text-sm">
         <%= @result.report.tools_count %> tool<%= if @result.report.tools_count == 1, do: "", else: "s" %>,
@@ -128,9 +145,9 @@ defmodule WaggerWeb.McpGeneratorLive do
   end
 
   defp derive_app_name(source) do
-    case Regex.run(~r/^\s*module\s+([a-zA-Z0-9_\-\.]+)/m, source) do
-      [_, name] -> String.replace_suffix(name, "-mcp", "")
-      _ -> "service"
+    case Regex.run(~r/^\s*module\s+([a-zA-Z_][a-zA-Z0-9_\-]*)/m, source) do
+      [_, name] -> {:ok, String.replace_suffix(name, "-mcp", "")}
+      _ -> :fallback
     end
   end
 end

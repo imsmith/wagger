@@ -55,9 +55,17 @@ defmodule Wagger.Generator.Mcp.Deriver do
   defp build_tool(%ExYang.Model.Rpc{} = rpc) do
     name = extension_arg(rpc.extensions, "tool-name") || kebab_to_snake(rpc.name)
 
+    llm_arg = extension_arg(rpc.extensions, "description-for-llm")
+
     {description, warns} =
-      case {extension_arg(rpc.extensions, "description-for-llm"), rpc.description} do
-        {nil, nil} ->
+      cond do
+        not blank?(llm_arg) ->
+          {llm_arg, []}
+
+        not blank?(rpc.description) ->
+          {rpc.description, []}
+
+        true ->
           {rpc.name,
            [
              %{
@@ -66,12 +74,6 @@ defmodule Wagger.Generator.Mcp.Deriver do
                message: "no description-for-llm or YANG description; using identifier"
              }
            ]}
-
-        {nil, yang_desc} ->
-          {yang_desc, []}
-
-        {llm_desc, _} ->
-          {llm_desc, []}
       end
 
     tool = %{
@@ -213,9 +215,17 @@ defmodule Wagger.Generator.Mcp.Deriver do
   defp build_prompt(%ExYang.Model.Rpc{} = rpc) do
     name = extension_arg(rpc.extensions, "prompt-name")
 
+    llm_arg = extension_arg(rpc.extensions, "description-for-llm")
+
     {description, warns} =
-      case {extension_arg(rpc.extensions, "description-for-llm"), rpc.description} do
-        {nil, nil} ->
+      cond do
+        not blank?(llm_arg) ->
+          {llm_arg, []}
+
+        not blank?(rpc.description) ->
+          {rpc.description, []}
+
+        true ->
           {rpc.name,
            [
              %{
@@ -224,12 +234,6 @@ defmodule Wagger.Generator.Mcp.Deriver do
                message: "no description; using identifier"
              }
            ]}
-
-        {nil, d} ->
-          {d, []}
-
-        {d, _} ->
-          {d, []}
       end
 
     {%{name: name, description: description, arguments: []}, warns}
@@ -315,4 +319,8 @@ defmodule Wagger.Generator.Mcp.Deriver do
       %{node: "/tools/#{n}", kind: :duplicate_tool_name, message: "duplicate tool name: #{n}"}
     end)
   end
+
+  defp blank?(nil), do: true
+  defp blank?(s) when is_binary(s), do: String.trim(s) == ""
+  defp blank?(_), do: false
 end

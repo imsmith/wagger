@@ -130,6 +130,28 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       assert {[t1, t2], _} = Deriver.derive_tools(rpcs)
       assert t1.name == t2.name
     end
+
+    test "empty description-for-llm falls back to YANG description" do
+      rpc = %ExYang.Model.Rpc{
+        name: "rpc1",
+        description: "yang doc",
+        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "description-for-llm"}, argument: ""}]
+      }
+
+      assert {[tool], _} = Deriver.derive_tools([rpc])
+      assert tool.description == "yang doc"
+    end
+
+    test "whitespace-only description-for-llm also falls back" do
+      rpc = %ExYang.Model.Rpc{
+        name: "rpc1",
+        description: "yang doc",
+        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "description-for-llm"}, argument: "   "}]
+      }
+
+      assert {[tool], _} = Deriver.derive_tools([rpc])
+      assert tool.description == "yang doc"
+    end
   end
 
   describe "derive_resources/1" do
