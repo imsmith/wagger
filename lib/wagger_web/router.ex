@@ -31,6 +31,8 @@ defmodule WaggerWeb.Router do
       live "/hub", HubListLive, :index
       live "/hub/:name", HubDetailLive, :show
     end
+
+    get "/mcp/download/:token", McpDownloadController, :show
   end
 
   scope "/api", WaggerWeb do
