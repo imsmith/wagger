@@ -81,16 +81,59 @@ if (process.env.NODE_ENV === "development") {
   })
 }
 
-// Copy config output to clipboard
+// Copy config output to clipboard. Falls back to execCommand for
+// non-secure contexts where navigator.clipboard is unavailable, and
+// always reports outcome on the sibling button so the user sees the result.
+function flashButton(btn, msg) {
+  if (!btn) return
+  const original = btn.innerText
+  btn.innerText = msg
+  setTimeout(() => { btn.innerText = original }, 1500)
+}
+
+function copyTextFallback(text) {
+  const ta = document.createElement("textarea")
+  ta.value = text
+  ta.setAttribute("readonly", "")
+  ta.style.position = "fixed"
+  ta.style.opacity = "0"
+  document.body.appendChild(ta)
+  ta.select()
+  let ok = false
+  try { ok = document.execCommand("copy") } catch (_) { ok = false }
+  document.body.removeChild(ta)
+  return ok
+}
+
 window.addEventListener("wagger:copy", (e) => {
-  const text = e.target.innerText
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = e.target.previousElementSibling || e.target.parentElement.querySelector("button")
-    if (btn) {
-      const original = btn.innerText
-      btn.innerText = "Copied!"
-      setTimeout(() => { btn.innerText = original }, 1500)
+  const el = e.target
+  const text = el.innerText
+  const btn = el.previousElementSibling || (el.parentElement && el.parentElement.querySelector("button"))
+  const onOk = () => flashButton(btn, "Copied!")
+  const onFail = () => {
+    if (copyTextFallback(text)) flashButton(btn, "Copied!")
+    else flashButton(btn, "Copy failed")
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(onOk, onFail)
+  } else {
+    onFail()
+  }
+})
+
+// Ctrl/Cmd+A inside a focused <pre> selects only that block's text,
+// matching the "select all" affordance users expect from textareas.
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "A")) {
+    const pre = e.target.closest && e.target.closest("pre.wagger-copyable")
+    if (pre) {
+      e.preventDefault()
+      const range = document.createRange()
+      range.selectNodeContents(pre)
+      const sel = window.getSelection()
+      sel.removeAllRanges()
+      sel.addRange(range)
     }
-  })
+  }
 })
 
