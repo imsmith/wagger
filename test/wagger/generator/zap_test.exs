@@ -121,15 +121,36 @@ defmodule Wagger.Generator.ZapTest do
       assert output =~ ~s(name: "waf-negative-path-tests")
     end
 
-    test "positive tests use !403 response code" do
+    test "positive job omits per-request responseCode and uses a stats test" do
+      # ZAP requestor `responseCode` is an Int with equality-only semantics, so
+      # "not 403" must be asserted at the job level via a stats test rather than
+      # a negated per-request code.
       assert {:ok, output} = Generator.generate(Zap, @routes, @config)
-      # Find lines in positive section
-      assert output =~ ~s(responseCode: "!403")
+      refute output =~ ~s(responseCode: "!403")
+
+      [_, positive_block, _] =
+        String.split(output, ["waf-positive-tests", "waf-negative-method-tests"])
+
+      refute positive_block =~ "responseCode:"
+      assert positive_block =~ ~s(statistic: "stats.code.403")
+      assert positive_block =~ ~s(operator: "==")
+      assert positive_block =~ "value: 0"
+      assert positive_block =~ ~s(onFail: "error")
     end
 
-    test "negative tests use 403 response code" do
+    test "negative tests use unquoted integer 403 response code" do
       assert {:ok, output} = Generator.generate(Zap, @routes, @config)
-      assert output =~ ~s(responseCode: "403")
+      assert output =~ "responseCode: 403"
+      refute output =~ ~s(responseCode: "403")
+    end
+
+    test "positive job is emitted before negative jobs so its stats test isn't polluted" do
+      assert {:ok, output} = Generator.generate(Zap, @routes, @config)
+      pos = :binary.match(output, "waf-positive-tests") |> elem(0)
+      neg_m = :binary.match(output, "waf-negative-method-tests") |> elem(0)
+      neg_p = :binary.match(output, "waf-negative-path-tests") |> elem(0)
+      assert pos < neg_m
+      assert neg_m < neg_p
     end
 
     test "path params are expanded in URLs" do

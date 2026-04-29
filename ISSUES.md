@@ -1,0 +1,17 @@
+# ISSUES
+
+
+-[x] On the /application page, the "Copy" button in each generated config text area does not function as intended. When clicked, it should copy the content of the respective text area to the clipboard, but currently, it does not perform this action. This issue needs to be addressed to enhance user experience and functionality on the application page.
+  - Fix: assets/js/app.js — added secure-context check, execCommand fallback for non-HTTPS, and visible "Copied!"/"Copy failed" feedback on the button.
+
+-[x] Also, within the text areas on the /application page a "select all" keyboard shortcut (Ctrl + A or Command + A) does not work as expected. When users attempt to use this shortcut to select all the text within the text area, it fails to select the content, which can be frustrating for users who want to quickly copy or edit the generated configuration. This issue should be resolved to improve usability and ensure that standard keyboard shortcuts function correctly within the application.
+  - Fix: the generated-config block is a `<pre>`, not a `<textarea>`. Added `tabindex="0"` + `wagger-copyable` class on the pre (app_detail_live, hub_detail_live) and a global keydown handler that scopes Ctrl/Cmd+A to the focused pre via `Range.selectNodeContents`. Click the block once to focus it, then Ctrl+A selects only that block. 
+
+-[ ] **AWS WAF — `SearchString` not base64-encoded.** The AWS WAF JSON output emits `SearchString` as raw text, but the AWS API expects it as a Blob (base64-encoded). Found 2026-04-28 while smoke-testing `avx-waf-test`; worked around by passing `--cli-binary-format raw-in-base64-out` to the AWS CLI. Fix: base64-encode `SearchString` values in the AWS provider's JSON emitter.
+
+-[x] **ZAP — `responseCode: "!403"` rejected by requestor job.** wagger's generated `zap-config.yml` emits `responseCode: "!403"` to express "not 403", but ZAP's requestor job requires an integer for `responseCode` and rejects the `!`-prefixed negation. Found 2026-04-28 in `avx-waf-test`; currently blocks ZAP integration end-to-end. Fix: express negated response-code assertions via a different mechanism (passive rule? custom comparator? separate field?).
+  - Fix: `lib/wagger/generator/zap.ex`. Per ZAP docs, `responseCode` is `Int` and equality-only. Negative jobs now emit unquoted `responseCode: 403` (was `"403"` string). Positive job omits per-request `responseCode` and adds a job-level `tests:` block with `type: stats`, `statistic: "stats.code.403"`, `operator: "=="`, `value: 0`, `onFail: "error"` to fail the job if any request returned 403. Positive job is rendered before negative jobs so its stats test fires before they intentionally produce 403s. Tests updated; full suite (470) passes; output round-trips through a YAML parser.
+
+## Parking Lot
+
+- **MCP tab on /applications/:id.** The MCP feature exists at `/mcp` as a paste-and-render flow, but is not surfaced from the per-app page. Wiring it in requires deciding where the YANG annotations come from for an app — `Wagger.Generator.Mcp.generate_from_yang/2` consumes annotated YANG, and apps don't have YANG content stored today (`source` is a file-path/URL marker). Blocked on annotation UX design: where users add `wagger-mcp:*` extensions, whether annotations live on routes, on `app.source`, or in a dedicated field, and how the per-app generator gets fed. Do not implement until the annotation UX is designed.

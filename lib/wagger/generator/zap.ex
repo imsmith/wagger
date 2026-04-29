@@ -73,9 +73,12 @@ defmodule Wagger.Generator.Zap do
             - "#{target_url}"
     """
 
-    positive_job = render_job("waf-positive-tests", positive, "!403")
-    negative_method_job = render_job("waf-negative-method-tests", negative_method, "403")
-    negative_path_job = render_job("waf-negative-path-tests", negative_path, "403")
+    # Positive job runs first so its stats test sees only its own responses.
+    # Negative jobs intentionally produce 403s and would pollute stats.code.403
+    # if positioned before the positive job's test fires.
+    positive_job = render_positive_job("waf-positive-tests", positive)
+    negative_method_job = render_negative_job("waf-negative-method-tests", negative_method)
+    negative_path_job = render_negative_job("waf-negative-path-tests", negative_path)
 
     (header <> "\njobs:\n" <> positive_job <> "\n" <> negative_method_job <> "\n" <> negative_path_job)
     |> String.trim_trailing()
@@ -139,7 +142,9 @@ defmodule Wagger.Generator.Zap do
     String.replace(path, ~r/\{[^}]+\}/, "1")
   end
 
-  defp render_job(name, tests, expected_code) do
+  # Negative jobs assert per-request that the WAF blocks with 403.
+  # ZAP's requestor `responseCode` is an Int and supports equality only.
+  defp render_negative_job(name, tests) do
     requests =
       Enum.map_join(tests, "", fn test ->
         desc_line =
@@ -152,7 +157,7 @@ defmodule Wagger.Generator.Zap do
         desc_line <>
           "        - url: \"#{test["url"]}\"\n" <>
           "          method: \"#{test["method"]}\"\n" <>
-          "          responseCode: \"#{expected_code}\"\n"
+          "          responseCode: 403\n"
       end)
 
     """
@@ -160,6 +165,41 @@ defmodule Wagger.Generator.Zap do
         name: "#{name}"
         requests:
     #{requests}\
+    """
+  end
+
+  # Positive job: ZAP requestor's `responseCode` is integer-only, no negation,
+  # so we cannot per-request assert "not 403". Instead, omit per-request codes
+  # and add a job-level stats test asserting zero 403s across the job's requests.
+  # `stats.code.403` is the global counter for 403 responses; the test fires at
+  # job completion. This relies on the positive job being run before any
+  # negative job that intentionally produces 403s.
+  defp render_positive_job(name, tests) do
+    requests =
+      Enum.map_join(tests, "", fn test ->
+        desc_line =
+          if test["description"] do
+            "        # #{test["description"]}\n"
+          else
+            ""
+          end
+
+        desc_line <>
+          "        - url: \"#{test["url"]}\"\n" <>
+          "          method: \"#{test["method"]}\"\n"
+      end)
+
+    """
+      - type: requestor
+        name: "#{name}"
+        requests:
+    #{requests}    tests:
+          - name: "no 403 responses in positive tests"
+            type: stats
+            statistic: "stats.code.403"
+            operator: "=="
+            value: 0
+            onFail: "error"
     """
   end
 
