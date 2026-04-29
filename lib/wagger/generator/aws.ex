@@ -191,7 +191,7 @@ defmodule Wagger.Generator.Aws do
         Enum.map(methods, fn method ->
           %{
             "ByteMatchStatement" => %{
-              "SearchString" => method,
+              "SearchString" => Base.encode64(method),
               "FieldToMatch" => %{"Method" => %{}},
               "TextTransformations" => @standard_transforms,
               "PositionalConstraint" => "EXACTLY"
@@ -245,7 +245,7 @@ defmodule Wagger.Generator.Aws do
   defp pattern_to_statement(%{"match-type" => match_type, "path" => path}) do
     %{
       "ByteMatchStatement" => %{
-        "SearchString" => path,
+        "SearchString" => Base.encode64(path),
         "FieldToMatch" => %{"UriPath" => %{}},
         "TextTransformations" => @standard_transforms,
         "PositionalConstraint" => match_type

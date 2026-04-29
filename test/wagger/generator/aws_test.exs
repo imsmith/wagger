@@ -136,6 +136,37 @@ defmodule Wagger.Generator.AwsTest do
       assert output =~ "EXACTLY"
     end
 
+    test "ByteMatchStatement.SearchString is base64-encoded (AWS Blob type)" do
+      # AWS WAF API documents ByteMatchStatement.SearchString as a Blob; over the
+      # JSON wire format it must be base64-encoded. Emitting raw text forces
+      # callers to pass --cli-binary-format raw-in-base64-out, which is a leaky
+      # workaround. Verify all SearchString values decode back to expected literals.
+      assert {:ok, output} = Generator.generate(Aws, @routes, @config)
+      decoded = Jason.decode!(output)
+
+      search_strings =
+        decoded["Rules"]
+        |> Enum.flat_map(&collect_search_strings/1)
+
+      assert search_strings != []
+
+      Enum.each(search_strings, fn s ->
+        assert is_binary(s)
+        assert {:ok, _decoded} = Base.decode64(s),
+               "expected base64-encoded SearchString, got #{inspect(s)}"
+      end)
+
+      decoded_values = Enum.map(search_strings, &Base.decode64!/1)
+
+      # Method enforcement strings should round-trip to HTTP method literals.
+      assert "GET" in decoded_values
+      assert "POST" in decoded_values
+
+      # Path allowlist strings should round-trip to declared paths.
+      assert "/health" in decoded_values
+      assert "/api/users" in decoded_values
+    end
+
     test "output includes VisibilityConfig" do
       assert {:ok, output} = Generator.generate(Aws, @routes, @config)
       decoded = Jason.decode!(output)
@@ -149,4 +180,18 @@ defmodule Wagger.Generator.AwsTest do
       assert length(decoded["Rules"]) > 0
     end
   end
+
+  defp collect_search_strings(%{"SearchString" => s} = node) do
+    [s | node |> Map.delete("SearchString") |> collect_search_strings()]
+  end
+
+  defp collect_search_strings(map) when is_map(map) do
+    Enum.flat_map(map, fn {_k, v} -> collect_search_strings(v) end)
+  end
+
+  defp collect_search_strings(list) when is_list(list) do
+    Enum.flat_map(list, &collect_search_strings/1)
+  end
+
+  defp collect_search_strings(_), do: []
 end
