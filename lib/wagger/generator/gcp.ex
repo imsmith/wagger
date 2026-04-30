@@ -14,24 +14,23 @@ defmodule Wagger.Generator.Gcp do
 
   ## Why chunked allow rules
 
-  Cloud Armor enforces TWO per-rule expression limits:
+  Cloud Armor enforces THREE per-rule limits, all of which the chunking
+  must respect:
 
-  1. 2048 characters per CEL expression
-  2. 5 sub-expressions per rule (sub-expressions are operands of `||` or
-     `&&` in the CEL expression; a single `matches()` call is one
-     sub-expression regardless of how many alternations are inside the
-     regex)
+  1. **2048 chars per CEL expression** (the entire `request.path.matches(...)`)
+  2. **5 sub-expressions per rule** (operands of `||` or `&&` in the CEL
+     expression — a single `matches()` call is one sub-expression
+     regardless of regex contents)
+  3. **1024 chars per regex** (the string inside `matches('...')`)
 
-  Naive chunking (`matches(p1) || matches(p2) || ... || matches(p30)`)
-  hits the 5-sub-expression limit hard. We instead pack many paths into
-  a single regex alternation inside ONE `matches()` call:
+  Limit (3) is the tightest. We pack alternation inside ONE `matches()`
+  call so we stay at one sub-expression per rule:
 
       request.path.matches('^/p1$|^/p2$|...|^/pN$')
 
-  That's one matches() = one sub-expression, well under 5. We chunk so
-  each rule's combined regex stays under ~1900 chars (margin under 2048).
-  At ~30-40 chars per path, this fits ~50 paths per rule. Cloud Armor's
-  per-policy rule limit is 200, so this scales to ~10k paths comfortably.
+  Chunk so each combined regex stays under ~950 chars (margin under 1024).
+  At ~30-40 chars per path, this fits ~25-30 paths per rule. Cloud Armor's
+  per-policy rule limit is 200, so this scales to ~5-6k paths comfortably.
   """
 
   @behaviour Wagger.Generator
@@ -43,9 +42,13 @@ defmodule Wagger.Generator.Gcp do
   @deny_all_priority 3000
   @default_priority 2_147_483_647
 
-  # Char budget per allow rule expression. Cloud Armor's hard limit is 2048;
-  # 1900 leaves margin for syntax overhead and any future regex growth.
-  @max_expression_chars 1900
+  # Cloud Armor limits we respect:
+  #   - CEL expression: 2048 chars total
+  #   - Inner regex (string passed to matches()): 1024 chars
+  #   - Sub-expressions: 5 per rule
+  # Inner regex is the tightest binding constraint. 950 leaves margin
+  # under 1024.
+  @max_inner_regex_chars 950
 
   @impl true
   def yang_module do
@@ -149,11 +152,7 @@ defmodule Wagger.Generator.Gcp do
   end
 
   defp build_allow_rules(regexes) do
-    # Budget the inner regex so the wrapping `request.path.matches('...')`
-    # stays under @max_expression_chars. Wrapper is "request.path.matches('')"
-    # = 26 chars of overhead.
-    inner_budget = @max_expression_chars - 26
-    chunks = chunk_regexes(regexes, inner_budget)
+    chunks = chunk_regexes(regexes, @max_inner_regex_chars)
     total = length(chunks)
 
     chunks

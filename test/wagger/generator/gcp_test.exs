@@ -88,7 +88,8 @@ defmodule Wagger.Generator.GcpTest do
 
     test "allow rule expressions stay under Cloud Armor's per-rule limits" do
       # Cloud Armor enforces:
-      #   - 2048 characters per CEL expression
+      #   - 2048 chars per CEL expression
+      #   - 1024 chars per inner regex (string inside matches())
       #   - 5 sub-expressions per rule (operands of || or &&)
       # Generate a synthetic large route set to exercise chunking.
       big_routes =
@@ -112,6 +113,15 @@ defmodule Wagger.Generator.GcpTest do
 
         assert String.length(expr) <= 2048,
                "allow rule expression exceeds Cloud Armor 2048-char limit: #{String.length(expr)}"
+
+        inner_regex =
+          case Regex.run(~r/request\.path\.matches\('([^']*)'\)/, expr) do
+            [_, regex] -> regex
+            nil -> ""
+          end
+
+        assert String.length(inner_regex) <= 1024,
+               "inner regex exceeds Cloud Armor 1024-char limit: #{String.length(inner_regex)}"
 
         # Sub-expression count = boolean operands of || or &&. Inside a
         # single regex string, `|` is regex alternation, not a CEL operator.
