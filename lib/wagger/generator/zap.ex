@@ -13,11 +13,14 @@ defmodule Wagger.Generator.Zap do
   @all_methods ~w(GET POST PUT PATCH DELETE HEAD OPTIONS)
   @default_target_url "{{TARGET_URL}}"
 
+  # Negative path tests must be well-formed HTTP that reach the WAF for
+  # evaluation. Paths that the LB's HTTP parser rejects (e.g. URLs with
+  # NUL bytes / %00) test the edge, not the WAF — the WAF never sees the
+  # request. Such paths belong in a separate edge-sanity bucket, not here.
   @bad_paths [
     {"/nonexistent", "Undeclared path"},
     {"/api/../etc/passwd", "Path traversal attempt"},
-    {"//double-slash", "Double slash"},
-    {"/%00null", "Null byte injection"}
+    {"//double-slash", "Double slash"}
   ]
 
   @impl true
@@ -142,8 +145,17 @@ defmodule Wagger.Generator.Zap do
     String.replace(path, ~r/\{[^}]+\}/, "1")
   end
 
-  # Negative jobs assert per-request that the WAF blocks with 403.
-  # ZAP's requestor `responseCode` is an Int and supports equality only.
+  # Negative jobs assert per-request that the WAF blocks with 403. A WAF
+  # block is specifically a 4xx response from the WAF (AWS WAFv2's default
+  # is 403). Anything else — backend response, redirect, edge LB reject —
+  # means the WAF did not block.
+  #
+  # ZAP requestor's `responseCode` is integer-equality only. That's fine
+  # because we want strict equality on 403: any other response code is by
+  # definition not a WAF block.
+  #
+  # Path test cases must be well-formed enough to reach the WAF; see the
+  # comment on @bad_paths for why /%00null and similar URLs were removed.
   defp render_negative_job(name, tests) do
     requests =
       Enum.map_join(tests, "", fn test ->

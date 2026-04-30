@@ -86,12 +86,15 @@ defmodule Wagger.Generator.ZapTest do
     test "negative path tests: fixed set of synthetic bad paths" do
       instance = Zap.map_routes(@routes, @config)
       negative_path = instance["zap-config"]["negative-path-tests"]
-      assert length(negative_path) == 4
+      assert length(negative_path) == 3
       urls = Enum.map(negative_path, & &1["url"])
       assert "https://staging.example.com/nonexistent" in urls
       assert "https://staging.example.com/api/../etc/passwd" in urls
       assert "https://staging.example.com//double-slash" in urls
-      assert "https://staging.example.com/%00null" in urls
+      # /%00null intentionally excluded — the LB's HTTP parser rejects URLs
+      # with NUL bytes before WAFv2 evaluates, so it tests the edge, not
+      # the WAF. See @bad_paths in the generator.
+      refute "https://staging.example.com/%00null" in urls
     end
 
     test "negative path tests all use GET method" do
@@ -139,6 +142,11 @@ defmodule Wagger.Generator.ZapTest do
     end
 
     test "negative tests use unquoted integer 403 response code" do
+      # A WAF block is specifically a 4xx from the WAF (AWS WAFv2's default
+      # block response is 403). Any other response code is not a WAF block.
+      # Strict equality is the right assertion. Test cases that don't reach
+      # the WAF (e.g. URLs the LB rejects at the parser) are filtered out
+      # of @bad_paths in the generator; see that comment.
       assert {:ok, output} = Generator.generate(Zap, @routes, @config)
       assert output =~ "responseCode: 403"
       refute output =~ ~s(responseCode: "403")
@@ -165,7 +173,7 @@ defmodule Wagger.Generator.ZapTest do
       assert output =~ "/nonexistent"
       assert output =~ "/api/../etc/passwd"
       assert output =~ "//double-slash"
-      assert output =~ "/%00null"
+      refute output =~ "/%00null"
     end
 
     test "header includes app name" do
