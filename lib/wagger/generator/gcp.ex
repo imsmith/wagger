@@ -14,13 +14,24 @@ defmodule Wagger.Generator.Gcp do
 
   ## Why chunked allow rules
 
-  Cloud Armor enforces a 2048-char-per-rule expression limit. A single
-  combined `!matches(p1) && !matches(p2) && ...` deny rule exceeds the
-  limit for any non-trivial allowlist (~30-40 paths). Inverting to many
-  small `matches(p1) || matches(p2) || ...` allow rules with a final
-  catch-all deny preserves allowlist semantics while staying under the
-  limit. Cloud Armor's per-policy rule limit is 200, so this scales to
-  several thousand paths.
+  Cloud Armor enforces TWO per-rule expression limits:
+
+  1. 2048 characters per CEL expression
+  2. 5 sub-expressions per rule (sub-expressions are operands of `||` or
+     `&&` in the CEL expression; a single `matches()` call is one
+     sub-expression regardless of how many alternations are inside the
+     regex)
+
+  Naive chunking (`matches(p1) || matches(p2) || ... || matches(p30)`)
+  hits the 5-sub-expression limit hard. We instead pack many paths into
+  a single regex alternation inside ONE `matches()` call:
+
+      request.path.matches('^/p1$|^/p2$|...|^/pN$')
+
+  That's one matches() = one sub-expression, well under 5. We chunk so
+  each rule's combined regex stays under ~1900 chars (margin under 2048).
+  At ~30-40 chars per path, this fits ~50 paths per rule. Cloud Armor's
+  per-policy rule limit is 200, so this scales to ~10k paths comfortably.
   """
 
   @behaviour Wagger.Generator
@@ -138,16 +149,18 @@ defmodule Wagger.Generator.Gcp do
   end
 
   defp build_allow_rules(regexes) do
-    chunks = chunk_regexes(regexes, @max_expression_chars)
+    # Budget the inner regex so the wrapping `request.path.matches('...')`
+    # stays under @max_expression_chars. Wrapper is "request.path.matches('')"
+    # = 26 chars of overhead.
+    inner_budget = @max_expression_chars - 26
+    chunks = chunk_regexes(regexes, inner_budget)
     total = length(chunks)
 
     chunks
     |> Enum.with_index()
     |> Enum.map(fn {chunk, idx} ->
-      expr =
-        chunk
-        |> Enum.map(&"request.path.matches('#{&1}')")
-        |> Enum.join(" || ")
+      combined_regex = Enum.join(chunk, "|")
+      expr = "request.path.matches('#{combined_regex}')"
 
       %{
         "priority" => @allow_rule_base_priority + idx,
@@ -183,14 +196,15 @@ defmodule Wagger.Generator.Gcp do
   # Chunking
   # ---------------------------------------------------------------------------
 
-  # Greedy bin-packing: walk regexes, accumulate into the current chunk
-  # until adding another would exceed max_chars (counting separator overhead).
-  # Then start a new chunk. Regex order is preserved within chunks.
+  # Greedy bin-packing for regex alternation. Each chunk's combined regex
+  # is `r1|r2|...|rN`; size is sum(len(ri)) + (N-1) for the `|` separators.
+  # Caller passes the budget for the inner regex (excludes the wrapping
+  # `request.path.matches('...')`).
   defp chunk_regexes(regexes, max_chars) do
     {chunks, last} =
       Enum.reduce(regexes, {[], {[], 0}}, fn regex, {chunks, {cur, cur_size}} ->
-        term_size = String.length(regex) + 25
-        sep_size = if cur == [], do: 0, else: 4
+        term_size = String.length(regex)
+        sep_size = if cur == [], do: 0, else: 1
         new_size = cur_size + sep_size + term_size
 
         cond do

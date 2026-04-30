@@ -53,7 +53,7 @@ defmodule Wagger.Generator.GcpTest do
       assert rate_rules == []
     end
 
-    test "allow rules exist at priority 2000+ and use OR-joined matches" do
+    test "allow rules exist at priority 2000+ and use a single matches() per rule" do
       instance = Gcp.map_routes(@routes, @config)
       rules = instance["gcp-armor-config"]["rules"]
       allow_rules = Enum.filter(rules, &(&1["priority"] >= 2000 and &1["priority"] < 3000))
@@ -62,7 +62,17 @@ defmodule Wagger.Generator.GcpTest do
       for rule <- allow_rules do
         assert rule["action"] == "allow"
         assert rule["match-type"] == "expr"
-        assert rule["cel-expression"] =~ "request.path.matches"
+        # Exactly one `request.path.matches(...)` call per rule; multiple
+        # paths are alternation inside the regex (not multiple matches()
+        # calls joined by `||`). Cloud Armor caps sub-expressions at 5.
+        matches_count =
+          rule["cel-expression"]
+          |> String.split("request.path.matches")
+          |> length()
+          |> Kernel.-(1)
+
+        assert matches_count == 1,
+               "expected exactly one matches() call per rule; got #{matches_count}"
       end
     end
 
@@ -76,7 +86,10 @@ defmodule Wagger.Generator.GcpTest do
       assert combined =~ "^/health$"
     end
 
-    test "each allow rule's expression stays under Cloud Armor's 2048-char limit" do
+    test "allow rule expressions stay under Cloud Armor's per-rule limits" do
+      # Cloud Armor enforces:
+      #   - 2048 characters per CEL expression
+      #   - 5 sub-expressions per rule (operands of || or &&)
       # Generate a synthetic large route set to exercise chunking.
       big_routes =
         for i <- 1..200 do
@@ -95,8 +108,29 @@ defmodule Wagger.Generator.GcpTest do
       assert length(allow_rules) > 1, "200 routes should produce multiple chunked allow rules"
 
       for rule <- allow_rules do
-        assert String.length(rule["cel-expression"]) <= 2048,
-               "allow rule expression exceeds Cloud Armor 2048-char limit: #{String.length(rule["cel-expression"])}"
+        expr = rule["cel-expression"]
+
+        assert String.length(expr) <= 2048,
+               "allow rule expression exceeds Cloud Armor 2048-char limit: #{String.length(expr)}"
+
+        # Sub-expression count = boolean operands of || or &&. Inside a
+        # single regex string, `|` is regex alternation, not a CEL operator.
+        # We use one matches() per rule, which is exactly one sub-expression.
+        cel_or_count =
+          expr
+          |> String.split(" || ")
+          |> length()
+          |> Kernel.-(1)
+
+        cel_and_count =
+          expr
+          |> String.split(" && ")
+          |> length()
+          |> Kernel.-(1)
+
+        sub_expr_count = cel_or_count + cel_and_count + 1
+        assert sub_expr_count <= 5,
+               "rule has #{sub_expr_count} sub-expressions; Cloud Armor limit is 5"
       end
     end
 
