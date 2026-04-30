@@ -24,39 +24,12 @@ defmodule Wagger.Generator.GcpTest do
       assert instance["gcp-armor-config"]["policy-name"] == "myapp-security-policy"
     end
 
-    test "rules list contains deny(403) rule at priority 1000" do
-      instance = Gcp.map_routes(@routes, @config)
-      rules = instance["gcp-armor-config"]["rules"]
-      deny = Enum.find(rules, &(&1["priority"] == 1000))
-      assert deny != nil
-      assert deny["action"] == "deny(403)"
-    end
-
-    test "deny rule CEL expression uses request.path for all routes" do
-      instance = Gcp.map_routes(@routes, @config)
-      rules = instance["gcp-armor-config"]["rules"]
-      deny = Enum.find(rules, &(&1["priority"] == 1000))
-      expr = deny["cel-expression"]
-      assert expr =~ "request.path"
-      assert expr =~ "!request.path.matches"
-    end
-
-    test "deny rule CEL expression combines all paths with &&" do
-      instance = Gcp.map_routes(@routes, @config)
-      rules = instance["gcp-armor-config"]["rules"]
-      deny = Enum.find(rules, &(&1["priority"] == 1000))
-      expr = deny["cel-expression"]
-      # Should have negated match for each route
-      assert expr =~ "!request.path.matches('^/api/users$')"
-      assert expr =~ "!request.path.matches('^/health$')"
-      assert String.contains?(expr, "&&")
-    end
-
-    test "rate-limited route generates rate_based_ban rule" do
+    test "rate-limited route generates rate_based_ban rule at priority 1000+" do
       instance = Gcp.map_routes(@routes, @config)
       rules = instance["gcp-armor-config"]["rules"]
       rate_rule = Enum.find(rules, &(&1["action"] == "rate_based_ban"))
       assert rate_rule != nil
+      assert rate_rule["priority"] >= 1000 and rate_rule["priority"] < 2000
       assert rate_rule["match-type"] == "expr"
       assert rate_rule["cel-expression"] =~ "request.path.matches"
     end
@@ -72,13 +45,6 @@ defmodule Wagger.Generator.GcpTest do
       assert rl["rate-limit-interval-sec"] == 60
     end
 
-    test "rate limit count is NOT multiplied (uses raw value)" do
-      instance = Gcp.map_routes(@routes, @config)
-      rules = instance["gcp-armor-config"]["rules"]
-      rate_rule = Enum.find(rules, &(&1["action"] == "rate_based_ban"))
-      assert rate_rule["rate-limit-options"]["rate-limit-count"] == 100
-    end
-
     test "routes without rate limit do not generate rate_based_ban rules" do
       routes = [%{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil}]
       instance = Gcp.map_routes(routes, @config)
@@ -87,13 +53,75 @@ defmodule Wagger.Generator.GcpTest do
       assert rate_rules == []
     end
 
-    test "default allow rule exists at priority 2147483647" do
+    test "allow rules exist at priority 2000+ and use OR-joined matches" do
+      instance = Gcp.map_routes(@routes, @config)
+      rules = instance["gcp-armor-config"]["rules"]
+      allow_rules = Enum.filter(rules, &(&1["priority"] >= 2000 and &1["priority"] < 3000))
+      assert length(allow_rules) >= 1
+
+      for rule <- allow_rules do
+        assert rule["action"] == "allow"
+        assert rule["match-type"] == "expr"
+        assert rule["cel-expression"] =~ "request.path.matches"
+      end
+    end
+
+    test "allow rules collectively cover every route's regex" do
+      instance = Gcp.map_routes(@routes, @config)
+      rules = instance["gcp-armor-config"]["rules"]
+      allow_rules = Enum.filter(rules, &(&1["priority"] >= 2000 and &1["priority"] < 3000))
+      combined = allow_rules |> Enum.map(& &1["cel-expression"]) |> Enum.join("\n")
+      assert combined =~ "^/api/users$"
+      assert combined =~ "^/api/users/[^/]+$"
+      assert combined =~ "^/health$"
+    end
+
+    test "each allow rule's expression stays under Cloud Armor's 2048-char limit" do
+      # Generate a synthetic large route set to exercise chunking.
+      big_routes =
+        for i <- 1..200 do
+          %{
+            path: "/api/endpoint_with_a_reasonably_long_name_#{i}",
+            methods: ["GET"],
+            path_type: "exact",
+            rate_limit: nil
+          }
+        end
+
+      instance = Gcp.map_routes(big_routes, @config)
+      rules = instance["gcp-armor-config"]["rules"]
+      allow_rules = Enum.filter(rules, &(&1["priority"] >= 2000 and &1["priority"] < 3000))
+
+      assert length(allow_rules) > 1, "200 routes should produce multiple chunked allow rules"
+
+      for rule <- allow_rules do
+        assert String.length(rule["cel-expression"]) <= 2048,
+               "allow rule expression exceeds Cloud Armor 2048-char limit: #{String.length(rule["cel-expression"])}"
+      end
+    end
+
+    test "deny-all rule exists at priority 3000 with action deny(403)" do
+      instance = Gcp.map_routes(@routes, @config)
+      rules = instance["gcp-armor-config"]["rules"]
+      deny = Enum.find(rules, &(&1["priority"] == 3000))
+      assert deny != nil
+      assert deny["action"] == "deny(403)"
+      assert deny["match-type"] == "versioned-expr"
+    end
+
+    test "default rule exists at priority 2147483647 (Cloud Armor convention)" do
       instance = Gcp.map_routes(@routes, @config)
       rules = instance["gcp-armor-config"]["rules"]
       default = Enum.find(rules, &(&1["priority"] == 2_147_483_647))
       assert default != nil
       assert default["action"] == "allow"
       assert default["match-type"] == "versioned-expr"
+    end
+
+    test "rule priority order: rate (1000+) < allow (2000+) < deny-all (3000) < default" do
+      instance = Gcp.map_routes(@routes, @config)
+      priorities = Enum.map(instance["gcp-armor-config"]["rules"], & &1["priority"])
+      assert Enum.sort(priorities) == priorities, "rules should be emitted in priority order"
     end
   end
 
@@ -114,12 +142,12 @@ defmodule Wagger.Generator.GcpTest do
       assert is_list(decoded["rules"])
     end
 
-    test "output contains request.path.matches in deny rule" do
+    test "output contains request.path.matches in allow rules" do
       assert {:ok, output} = Generator.generate(Gcp, @routes, @config)
       assert output =~ "request.path.matches"
     end
 
-    test "deny(403) rule is present in output" do
+    test "deny(403) appears in output" do
       assert {:ok, output} = Generator.generate(Gcp, @routes, @config)
       assert output =~ "deny(403)"
     end
@@ -136,7 +164,7 @@ defmodule Wagger.Generator.GcpTest do
       assert rl["rateLimitThreshold"]["intervalSec"] == 60
     end
 
-    test "default allow rule uses SRC_IPS_V1 versioned expression" do
+    test "default rule uses SRC_IPS_V1 versioned expression" do
       assert {:ok, output} = Generator.generate(Gcp, @routes, @config)
       decoded = Jason.decode!(output)
       default = Enum.find(decoded["rules"], &(&1["priority"] == 2_147_483_647))
@@ -145,10 +173,13 @@ defmodule Wagger.Generator.GcpTest do
       assert default["match"]["config"]["srcIpRanges"] == ["*"]
     end
 
-    test "rules array is non-empty and has at least deny and default rules" do
+    test "deny-all rule at priority 3000 uses SRC_IPS_V1 with srcIpRanges *" do
       assert {:ok, output} = Generator.generate(Gcp, @routes, @config)
       decoded = Jason.decode!(output)
-      assert length(decoded["rules"]) >= 2
+      deny = Enum.find(decoded["rules"], &(&1["priority"] == 3000))
+      assert deny["action"] == "deny(403)"
+      assert deny["match"]["versionedExpr"] == "SRC_IPS_V1"
+      assert deny["match"]["config"]["srcIpRanges"] == ["*"]
     end
   end
 end
