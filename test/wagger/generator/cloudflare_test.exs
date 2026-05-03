@@ -99,6 +99,115 @@ defmodule Wagger.Generator.CloudflareTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Method enforcement (allow rule must check (method, path), not path alone)
+  # ---------------------------------------------------------------------------
+
+  describe "method enforcement on block rule" do
+    test "block expression references http.request.method" do
+      instance = Cloudflare.map_routes(@routes, @config)
+      block_rule =
+        instance["cloudflare-config"]["rules"]
+        |> Enum.find(&(&1["action"] == "block"))
+
+      assert block_rule["expression"] =~ "http.request.method"
+    end
+
+    test "single-method route uses eq for method check" do
+      routes = [%{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil}]
+      instance = Cloudflare.map_routes(routes, @config)
+      block_rule =
+        instance["cloudflare-config"]["rules"]
+        |> Enum.find(&(&1["action"] == "block"))
+
+      assert block_rule["expression"] =~ ~s|http.request.method eq "GET"|
+    end
+
+    test "multi-method route uses in {...} set syntax" do
+      routes = [
+        %{path: "/api/users", methods: ["GET", "POST"], path_type: "exact", rate_limit: nil}
+      ]
+
+      instance = Cloudflare.map_routes(routes, @config)
+      block_rule =
+        instance["cloudflare-config"]["rules"]
+        |> Enum.find(&(&1["action"] == "block"))
+
+      assert block_rule["expression"] =~ ~s|http.request.method in {"GET" "POST"}|
+    end
+
+    test "routes with distinct method-sets become distinct OR-clauses, not interleaved" do
+      routes = [
+        %{path: "/a", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/b", methods: ["POST"], path_type: "exact", rate_limit: nil}
+      ]
+
+      instance = Cloudflare.map_routes(routes, @config)
+      expr =
+        instance["cloudflare-config"]["rules"]
+        |> Enum.find(&(&1["action"] == "block"))
+        |> Map.get("expression")
+
+      # Each path should be paired ONLY with its own method, not the other's
+      get_clause_position = position_of(expr, "/a")
+      post_clause_position = position_of(expr, "/b")
+
+      get_method_position = position_of(expr, ~s|"GET"|)
+      post_method_position = position_of(expr, ~s|"POST"|)
+
+      # Method tokens must actually appear (>= 0) and precede their paired path
+      assert get_method_position >= 0, "GET method check missing from expression"
+      assert post_method_position >= 0, "POST method check missing from expression"
+      assert get_method_position < get_clause_position
+      assert post_method_position < post_clause_position
+    end
+
+    test "routes sharing a method-set are packed under one method check" do
+      routes = [
+        %{path: "/a", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/b", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/c", methods: ["GET"], path_type: "exact", rate_limit: nil}
+      ]
+
+      instance = Cloudflare.map_routes(routes, @config)
+      expr =
+        instance["cloudflare-config"]["rules"]
+        |> Enum.find(&(&1["action"] == "block"))
+        |> Map.get("expression")
+
+      # Only one method check should appear; paths share it
+      method_check_count =
+        expr
+        |> String.split("http.request.method")
+        |> length()
+        |> Kernel.-(1)
+
+      assert method_check_count == 1,
+             "expected one method check for shared-bucket paths, got #{method_check_count}"
+    end
+
+    test "atomic explosion: [GET,POST] /a equivalent to [GET] /a + [POST] /a" do
+      multi = [%{path: "/a", methods: ["GET", "POST"], path_type: "exact", rate_limit: nil}]
+
+      atomic = [
+        %{path: "/a", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/a", methods: ["POST"], path_type: "exact", rate_limit: nil}
+      ]
+
+      multi_expr =
+        Cloudflare.map_routes(multi, @config)["cloudflare-config"]["rules"]
+        |> Enum.find(&(&1["action"] == "block"))
+        |> Map.get("expression")
+
+      atomic_expr =
+        Cloudflare.map_routes(atomic, @config)["cloudflare-config"]["rules"]
+        |> Enum.find(&(&1["action"] == "block"))
+        |> Map.get("expression")
+
+      assert multi_expr == atomic_expr
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Full pipeline tests via Generator.generate/3
   # ---------------------------------------------------------------------------
 
@@ -150,6 +259,13 @@ defmodule Wagger.Generator.CloudflareTest do
       yang_source = Cloudflare.yang_module()
       assert {:ok, parsed} = ExYang.parse(yang_source)
       assert {:ok, _resolved} = ExYang.resolve(parsed, %{})
+    end
+  end
+
+  defp position_of(string, needle) do
+    case :binary.match(string, needle) do
+      {pos, _} -> pos
+      :nomatch -> -1
     end
   end
 

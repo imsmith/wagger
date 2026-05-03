@@ -120,13 +120,56 @@ defmodule Wagger.Generator.Cloudflare do
     }
   end
 
+  # Allowlist semantics are over `(method, path)` pairs, not paths alone.
+  # We partition routes by their effective method-set (explode → cluster
+  # by path → cluster by reconstructed set) so each path appears under
+  # exactly one method check, then emit:
+  #
+  #   not ((method_check_1 and (p1_expr or p2_expr)) or
+  #        (method_check_2 and (p3_expr)) or ...)
+  #
+  # Single-method buckets use `eq`; multi-method buckets use Cloudflare's
+  # set syntax `in {"GET" "POST"}`.
   defp build_allowlist_expression(routes) do
-    inner =
+    bucket_exprs =
       routes
-      |> Enum.map(&build_path_expression/1)
-      |> Enum.join(" or ")
+      |> partition_by_method_set()
+      |> Enum.map(fn {methods, bucket_routes} ->
+        method_check = build_method_check(methods)
+        path_exprs = Enum.map(bucket_routes, &build_path_expression/1)
 
+        path_clause =
+          case path_exprs do
+            [single] -> single
+            many -> "(" <> Enum.join(many, " or ") <> ")"
+          end
+
+        "(#{method_check} and #{path_clause})"
+      end)
+
+    inner = Enum.join(bucket_exprs, " or ")
     "not (#{inner})"
+  end
+
+  defp partition_by_method_set(routes) do
+    routes
+    |> Enum.flat_map(fn r -> Enum.map(r.methods, &{&1, r}) end)
+    |> Enum.uniq_by(fn {m, r} -> {m, r.path} end)
+    |> Enum.group_by(fn {_, r} -> r.path end)
+    |> Enum.map(fn {_path, atoms} ->
+      methods = atoms |> Enum.map(&elem(&1, 0)) |> Enum.sort() |> Enum.uniq()
+      route = atoms |> List.first() |> elem(1)
+      {methods, route}
+    end)
+    |> Enum.group_by(fn {methods, _} -> methods end, fn {_, route} -> route end)
+    |> Enum.sort_by(fn {methods, _} -> methods end)
+  end
+
+  defp build_method_check([single]), do: ~s|http.request.method eq "#{single}"|
+
+  defp build_method_check(methods) do
+    list = methods |> Enum.map(&~s|"#{&1}"|) |> Enum.join(" ")
+    "http.request.method in {#{list}}"
   end
 
   defp build_path_expression(%{path: path, path_type: "prefix"}) do
