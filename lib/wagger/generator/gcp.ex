@@ -168,7 +168,7 @@ defmodule Wagger.Generator.Gcp do
   end
 
   defp build_allow_rules(normalized) do
-    buckets = partition_by_method_set(normalized)
+    buckets = PathHelper.partition_by_method_set(normalized, &PathHelper.to_regex/1)
 
     rules =
       buckets
@@ -198,25 +198,6 @@ defmodule Wagger.Generator.Gcp do
       |> Map.put("priority", @allow_rule_base_priority + idx)
       |> Map.update!("description", &"#{&1} (chunk #{idx + 1}/#{total})")
     end)
-  end
-
-  # Explode routes to atomic (method, path) pairs, then re-cluster by path
-  # to reconstruct each path's effective method-set, then bucket paths by
-  # their reconstructed method-set. Returns a list of {sorted_methods,
-  # [regex, ...]} tuples in deterministic order so rule priorities are
-  # stable across runs.
-  defp partition_by_method_set(normalized) do
-    normalized
-    |> Enum.flat_map(fn r -> Enum.map(r.methods, &{&1, r}) end)
-    |> Enum.uniq_by(fn {m, r} -> {m, r.path} end)
-    |> Enum.group_by(fn {_, r} -> r.path end)
-    |> Enum.map(fn {_path, atoms} ->
-      methods = atoms |> Enum.map(&elem(&1, 0)) |> Enum.sort() |> Enum.uniq()
-      route = atoms |> List.first() |> elem(1)
-      {methods, PathHelper.to_regex(route)}
-    end)
-    |> Enum.group_by(fn {methods, _} -> methods end, fn {_, regex} -> regex end)
-    |> Enum.sort_by(fn {methods, _} -> methods end)
   end
 
   defp build_method_check([single]), do: "request.method == '#{single}'"

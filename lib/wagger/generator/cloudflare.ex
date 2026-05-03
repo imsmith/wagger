@@ -133,7 +133,7 @@ defmodule Wagger.Generator.Cloudflare do
   defp build_allowlist_expression(routes) do
     bucket_exprs =
       routes
-      |> partition_by_method_set()
+      |> PathHelper.partition_by_method_set(& &1)
       |> Enum.map(fn {methods, bucket_routes} ->
         method_check = build_method_check(methods)
         path_exprs = Enum.map(bucket_routes, &build_path_expression/1)
@@ -149,20 +149,6 @@ defmodule Wagger.Generator.Cloudflare do
 
     inner = Enum.join(bucket_exprs, " or ")
     "not (#{inner})"
-  end
-
-  defp partition_by_method_set(routes) do
-    routes
-    |> Enum.flat_map(fn r -> Enum.map(r.methods, &{&1, r}) end)
-    |> Enum.uniq_by(fn {m, r} -> {m, r.path} end)
-    |> Enum.group_by(fn {_, r} -> r.path end)
-    |> Enum.map(fn {_path, atoms} ->
-      methods = atoms |> Enum.map(&elem(&1, 0)) |> Enum.sort() |> Enum.uniq()
-      route = atoms |> List.first() |> elem(1)
-      {methods, route}
-    end)
-    |> Enum.group_by(fn {methods, _} -> methods end, fn {_, route} -> route end)
-    |> Enum.sort_by(fn {methods, _} -> methods end)
   end
 
   defp build_method_check([single]), do: ~s|http.request.method eq "#{single}"|

@@ -160,7 +160,7 @@ defmodule Wagger.Generator.Azure do
   # Both conditions AND together within a single Azure custom rule.
   defp build_method_enforcement_rules(routes, prefix) do
     routes
-    |> partition_by_method_set()
+    |> PathHelper.partition_by_method_set(&PathHelper.to_regex/1)
     |> Enum.with_index()
     |> Enum.map(fn {{methods, regexes}, idx} ->
       %{
@@ -186,20 +186,6 @@ defmodule Wagger.Generator.Azure do
         ]
       }
     end)
-  end
-
-  defp partition_by_method_set(routes) do
-    routes
-    |> Enum.flat_map(fn r -> Enum.map(r.methods, &{&1, r}) end)
-    |> Enum.uniq_by(fn {m, r} -> {m, r.path} end)
-    |> Enum.group_by(fn {_, r} -> r.path end)
-    |> Enum.map(fn {_path, atoms} ->
-      methods = atoms |> Enum.map(&elem(&1, 0)) |> Enum.sort() |> Enum.uniq()
-      route = atoms |> List.first() |> elem(1)
-      {methods, PathHelper.to_regex(route)}
-    end)
-    |> Enum.group_by(fn {methods, _} -> methods end, fn {_, regex} -> regex end)
-    |> Enum.sort_by(fn {methods, _} -> methods end)
   end
 
   defp build_rate_limit_rule(route, prefix, priority) do
