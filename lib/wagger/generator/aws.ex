@@ -119,10 +119,9 @@ defmodule Wagger.Generator.Aws do
 
   defp build_method_rules(normalized, prefix, starting_priority: base) do
     normalized
-    |> Enum.group_by(& &1.methods)
+    |> PathHelper.partition_by_method_set(& &1.path)
     |> Enum.with_index()
-    |> Enum.map(fn {{methods, routes}, idx} ->
-      paths = Enum.map(routes, & &1.path)
+    |> Enum.map(fn {{methods, paths}, idx} ->
       group_name = "group-#{Enum.join(Enum.map(methods, &String.downcase/1), "-")}"
 
       %{
