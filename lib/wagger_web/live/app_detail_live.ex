@@ -14,7 +14,7 @@ defmodule WaggerWeb.AppDetailLive do
   alias Wagger.Routes
   alias Wagger.Snapshots
 
-  @providers ~w(aws azure caddy cloudflare coraza gcp nginx zap)
+  @providers ~w(aws azure caddy cloudflare coraza gcp gcp_urlmap nginx zap)
 
   @impl true
   def mount(%{"id" => id}, _session, socket) do
@@ -179,6 +179,7 @@ defmodule WaggerWeb.AppDetailLive do
     "cloudflare" => Wagger.Generator.Cloudflare,
     "azure" => Wagger.Generator.Azure,
     "gcp" => Wagger.Generator.Gcp,
+    "gcp_urlmap" => Wagger.Generator.GcpUrlMap,
     "caddy" => Wagger.Generator.Caddy,
     "coraza" => Wagger.Generator.Coraza,
     "zap" => Wagger.Generator.Zap
@@ -191,6 +192,7 @@ defmodule WaggerWeb.AppDetailLive do
     "cloudflare" => [{"prefix", "Name prefix"}],
     "azure" => [{"prefix", "Name prefix"}, {"mode", "Prevention or Detection"}],
     "gcp" => [{"prefix", "Name prefix"}],
+    "gcp_urlmap" => [{"prefix", "Name prefix"}],
     "coraza" => [{"prefix", "Name prefix"}, {"start_rule_id", "Starting rule ID (default 100001)"}],
     "zap" => [{"prefix", "Name prefix"}, {"target_url", "Target URL (or {{TARGET_URL}})"}]
   }
