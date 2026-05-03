@@ -82,6 +82,140 @@ defmodule Wagger.Generator.AzureTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Method enforcement (block disallowed methods on allowed paths)
+  #
+  # Azure custom rules' matchConditions AND together within a rule, so the
+  # negated path-allowlist alone can't express "block if (method, path)
+  # not in allowlist" when more than one method-set exists. The fix layers
+  # additional Block rules on top of the existing path-allowlist: one per
+  # method-set bucket, firing when "URI matches bucket-paths AND method
+  # NOT in bucket-methods."
+  # ---------------------------------------------------------------------------
+
+  describe "method enforcement on allowed paths" do
+    test "emits a method-enforcement Block rule per distinct method-set" do
+      routes = [
+        %{path: "/a", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/b", methods: ["POST"], path_type: "exact", rate_limit: nil}
+      ]
+
+      instance = Azure.map_routes(routes, @config)
+      rules = instance["azure-fd-policy"]["custom-rules"]["rules"]
+
+      method_rules = Enum.filter(rules, &String.contains?(&1["name"], "EnforceMethods"))
+      assert length(method_rules) == 2
+    end
+
+    test "method enforcement rule has two match conditions: URI match + method NOT in set" do
+      routes = [%{path: "/a", methods: ["GET", "POST"], path_type: "exact", rate_limit: nil}]
+      instance = Azure.map_routes(routes, @config)
+      rules = instance["azure-fd-policy"]["custom-rules"]["rules"]
+
+      method_rule = Enum.find(rules, &String.contains?(&1["name"], "EnforceMethods"))
+      assert method_rule != nil
+      assert method_rule["action"] == "Block"
+
+      conditions = method_rule["match-conditions"]
+      assert length(conditions) == 2
+
+      uri_cond = Enum.find(conditions, &(&1["match-variable"] == "RequestUri"))
+      assert uri_cond["negate-condition"] == false
+      assert "^/a$" in uri_cond["match-values"]
+
+      method_cond = Enum.find(conditions, &(&1["match-variable"] == "RequestMethod"))
+      assert method_cond["negate-condition"] == true
+      assert Enum.sort(method_cond["match-values"]) == ["GET", "POST"]
+    end
+
+    test "single-method bucket lists only that method in negated condition" do
+      routes = [%{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil}]
+      instance = Azure.map_routes(routes, @config)
+      rules = instance["azure-fd-policy"]["custom-rules"]["rules"]
+
+      method_rule = Enum.find(rules, &String.contains?(&1["name"], "EnforceMethods"))
+      method_cond =
+        Enum.find(method_rule["match-conditions"], &(&1["match-variable"] == "RequestMethod"))
+
+      assert method_cond["match-values"] == ["GET"]
+      assert method_cond["negate-condition"] == true
+    end
+
+    test "routes sharing a method-set are packed in one method-enforcement rule" do
+      routes = [
+        %{path: "/a", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/b", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/c", methods: ["GET"], path_type: "exact", rate_limit: nil}
+      ]
+
+      instance = Azure.map_routes(routes, @config)
+      method_rules =
+        instance["azure-fd-policy"]["custom-rules"]["rules"]
+        |> Enum.filter(&String.contains?(&1["name"], "EnforceMethods"))
+
+      assert length(method_rules) == 1
+
+      uri_cond =
+        hd(method_rules)["match-conditions"]
+        |> Enum.find(&(&1["match-variable"] == "RequestUri"))
+
+      assert "^/a$" in uri_cond["match-values"]
+      assert "^/b$" in uri_cond["match-values"]
+      assert "^/c$" in uri_cond["match-values"]
+    end
+
+    test "atomic explosion: [GET,POST] /a equivalent to [GET] /a + [POST] /a" do
+      multi = [%{path: "/a", methods: ["GET", "POST"], path_type: "exact", rate_limit: nil}]
+
+      atomic = [
+        %{path: "/a", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/a", methods: ["POST"], path_type: "exact", rate_limit: nil}
+      ]
+
+      multi_method_rules =
+        Azure.map_routes(multi, @config)["azure-fd-policy"]["custom-rules"]["rules"]
+        |> Enum.filter(&String.contains?(&1["name"], "EnforceMethods"))
+        |> Enum.map(&(&1["match-conditions"]))
+
+      atomic_method_rules =
+        Azure.map_routes(atomic, @config)["azure-fd-policy"]["custom-rules"]["rules"]
+        |> Enum.filter(&String.contains?(&1["name"], "EnforceMethods"))
+        |> Enum.map(&(&1["match-conditions"]))
+
+      assert multi_method_rules == atomic_method_rules
+    end
+
+    test "method-enforcement rules have priority between allowlist (1) and rate-limit (100)" do
+      instance = Azure.map_routes(@routes, @config)
+      method_rules =
+        instance["azure-fd-policy"]["custom-rules"]["rules"]
+        |> Enum.filter(&String.contains?(&1["name"], "EnforceMethods"))
+
+      for rule <- method_rules do
+        assert rule["priority"] > 1 and rule["priority"] < 100,
+               "method-enforcement priority #{rule["priority"]} out of expected range"
+      end
+    end
+
+    test "method-enforcement rule serialized with correct Azure shape" do
+      assert {:ok, output} = Generator.generate(Azure, @routes, @config)
+      decoded = Jason.decode!(output)
+      rules = get_in(decoded, ["properties", "customRules", "rules"])
+
+      method_rule = Enum.find(rules, &String.contains?(&1["name"], "EnforceMethods"))
+      assert method_rule != nil
+      assert method_rule["action"] == "Block"
+
+      method_cond =
+        Enum.find(method_rule["matchConditions"], &(&1["matchVariable"] == "RequestMethod"))
+
+      assert method_cond["negateCondition"] == true
+      assert is_list(method_cond["matchValue"])
+      assert "GET" in method_cond["matchValue"] or
+               Enum.any?(method_cond["matchValue"], &(&1 in ["GET", "POST", "PUT", "DELETE"]))
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Full pipeline tests via Generator.generate/3
   # ---------------------------------------------------------------------------
 

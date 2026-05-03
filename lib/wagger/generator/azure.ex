@@ -5,9 +5,28 @@ defmodule Wagger.Generator.Azure do
   Produces an Azure Front Door WAF policy JSON document with:
   - A path-allowlist custom rule using `RegEx` operator with `negateCondition: true`,
     blocking any request whose URI does not match one of the known route patterns
+  - Per-method-set `MethodEnforcementRule` entries (priority 2..N) that block
+    requests whose URI matches a bucket's paths but whose method is not in
+    the bucket's allowed method-set
   - Per-route `RateLimitRule` entries for routes that carry a `rate_limit` value;
     the limit is multiplied by 5 to express a 5-minute window (matching AWS behaviour)
   - Configurable `Prevention` or `Detection` mode via `config.mode`
+
+  ## Why two layers of allowlist enforcement
+
+  Azure custom rule `matchConditions` AND together within a rule, so a single
+  negated rule can express "URI not in allowlist" but not "(method, path)
+  not in allowlist" when more than one method-set exists. We layer:
+
+  1. The path-allowlist rule (priority 1) blocks unknown URIs.
+  2. One method-enforcement rule per method-set bucket (priority 2..N) blocks
+     requests where the URI is in the bucket's paths but the method is not
+     in the bucket's allowed methods.
+
+  Bucketing uses explode-then-cluster: explode each route into atomic
+  (method, path) pairs, regroup by path to reconstruct effective method-sets,
+  then group paths sharing a method-set. Each path lands in exactly one
+  bucket and one enforcement rule.
 
   The `serialize/2` callback emits a JSON string matching the Azure Front Door
   WAF policy `properties` envelope expected by ARM / Bicep deployments.
@@ -17,8 +36,10 @@ defmodule Wagger.Generator.Azure do
 
   alias Wagger.Generator.PathHelper
 
-  # Base priority for the allowlist match rule; rate-limit rules start above it.
+  # Base priority for the allowlist match rule; method-enforcement rules
+  # occupy 2..(2 + #buckets - 1); rate-limit rules start at 100+.
   @allowlist_priority 1
+  @method_enforcement_priority_base 2
   @rate_limit_priority_base 100
   @rate_limit_duration_minutes 5
 
@@ -36,6 +57,7 @@ defmodule Wagger.Generator.Azure do
     normalized = Enum.map(routes, &normalize/1)
 
     allowlist_rule = build_allowlist_rule(normalized, prefix)
+    method_enforcement_rules = build_method_enforcement_rules(normalized, prefix)
 
     rate_limit_rules =
       normalized
@@ -45,7 +67,7 @@ defmodule Wagger.Generator.Azure do
         build_rate_limit_rule(route, prefix, @rate_limit_priority_base + idx)
       end)
 
-    all_rules = [allowlist_rule | rate_limit_rules]
+    all_rules = [allowlist_rule | method_enforcement_rules] ++ rate_limit_rules
 
     %{
       "azure-fd-policy" => %{
@@ -131,6 +153,53 @@ defmodule Wagger.Generator.Azure do
         }
       ]
     }
+  end
+
+  # One Block rule per method-set bucket. Fires when the URI matches a
+  # bucket's paths AND the method is NOT in the bucket's allowed methods.
+  # Both conditions AND together within a single Azure custom rule.
+  defp build_method_enforcement_rules(routes, prefix) do
+    routes
+    |> partition_by_method_set()
+    |> Enum.with_index()
+    |> Enum.map(fn {{methods, regexes}, idx} ->
+      %{
+        "name" => "#{prefix}EnforceMethods#{idx}",
+        "priority" => @method_enforcement_priority_base + idx,
+        "rule-type" => "MatchRule",
+        "action" => "Block",
+        "match-conditions" => [
+          %{
+            "match-variable" => "RequestUri",
+            "operator" => "RegEx",
+            "negate-condition" => false,
+            "match-values" => regexes,
+            "transforms" => ["UrlDecode", "Lowercase"]
+          },
+          %{
+            "match-variable" => "RequestMethod",
+            "operator" => "Equal",
+            "negate-condition" => true,
+            "match-values" => methods,
+            "transforms" => []
+          }
+        ]
+      }
+    end)
+  end
+
+  defp partition_by_method_set(routes) do
+    routes
+    |> Enum.flat_map(fn r -> Enum.map(r.methods, &{&1, r}) end)
+    |> Enum.uniq_by(fn {m, r} -> {m, r.path} end)
+    |> Enum.group_by(fn {_, r} -> r.path end)
+    |> Enum.map(fn {_path, atoms} ->
+      methods = atoms |> Enum.map(&elem(&1, 0)) |> Enum.sort() |> Enum.uniq()
+      route = atoms |> List.first() |> elem(1)
+      {methods, PathHelper.to_regex(route)}
+    end)
+    |> Enum.group_by(fn {methods, _} -> methods end, fn {_, regex} -> regex end)
+    |> Enum.sort_by(fn {methods, _} -> methods end)
   end
 
   defp build_rate_limit_rule(route, prefix, priority) do
