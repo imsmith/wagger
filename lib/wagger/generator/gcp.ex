@@ -2,70 +2,49 @@ defmodule Wagger.Generator.Gcp do
   @moduledoc """
   GCP Cloud Armor security policy generator implementing the `Wagger.Generator` behaviour.
 
-  Produces a Cloud Armor security policy as JSON with:
-  - Per-route rate_based_ban rules at priority 1000+ (must fire first)
-  - Allow rules at priority 2000+, chunked so each rule's CEL expression
-    stays under Cloud Armor's per-rule 2048-character limit
-  - A single catch-all deny(403) at priority 3000
-  - The mandatory default rule at priority 2147483647 (preserved per
-    Cloud Armor convention; unreachable in this allow-list model)
+  ## Role in the GCP two-layer architecture
 
-  Path matching uses CEL expressions via `request.path.matches('regex')`.
+  Cloud Armor is **defense-in-depth behind the URL Map**. It does NOT
+  enumerate allowed `(method, path)` pairs — that is `Wagger.Generator.GcpUrlMap`'s
+  responsibility. Cloud Armor's role is:
 
-  ## Why chunked allow rules
+  - **Rate limiting** — `rate_based_ban` rules at priority 1000+ applied per-path.
+  - **IP / geo posture** — one allow rule (priority 2000) admits traffic from
+    declared sources; traffic not matching is denied by the default rule.
+  - **Future** — preconfigured WAF rules, bot management, etc.
 
-  Cloud Armor enforces THREE per-rule limits, all of which the chunking
-  must respect:
+  Because the URL Map already gates `(method, path)`, the Cloud Armor default
+  rule is set to `deny(403)` rather than `allow`. This makes the posture model
+  explicit: only traffic from declared sources (or all sources if no posture
+  is declared) reaches the backend service.
 
-  1. **2048 chars per CEL expression** (the entire `request.path.matches(...)`)
-  2. **5 sub-expressions per rule** (operands of `||` or `&&` in the CEL
-     expression — a single `matches()` call is one sub-expression
-     regardless of regex contents)
-  3. **1024 chars per regex** (the string inside `matches('...')`)
+  ## Posture dispatch table
 
-  Limit (3) is the tightest. We pack alternation inside ONE `matches()`
-  call so we stay at one sub-expression per rule:
+  The single posture allow rule (priority `#{2000}`) is built from two optional
+  config keys: `allow_ip_ranges` (list of CIDR strings) and `allow_regions`
+  (list of region codes like `"US"`, `"GB"`):
 
-      request.method in ['GET', 'POST'] && request.path.matches('^/p1$|^/p2$|...|^/pN$')
+  | `allow_ip_ranges` | `allow_regions` | Allow rule shape |
+  |-------------------|-----------------|------------------|
+  | nil / empty       | nil / empty     | `versioned-expr` SRC_IPS_V1 `srcIpRanges: ["*"]` (permissive) |
+  | declared          | nil / empty     | `versioned-expr` SRC_IPS_V1 `srcIpRanges: <CIDRs>` |
+  | nil / empty       | declared        | CEL `origin.region_code in [...]` |
+  | declared          | declared        | CEL AND of IP ranges + region code |
 
-  Chunk so each combined regex stays under ~950 chars (margin under 1024).
-  At ~30-40 chars per path, this fits ~25-30 paths per rule. The method
-  check costs one additional sub-expression (the `&&` joins two operands),
-  well within the 5-per-rule budget.
+  In all cases the default rule (priority 2147483647) is `deny(403)`.
 
-  ## Method enforcement and bucketing
+  ## Rule priority layout
 
-  The semantic key for each allow entry is `(method, path)`, not `path`
-  alone. To pack densely, we partition routes by their method-set:
-
-  1. Explode each declared route into atomic `(method, path)` pairs
-  2. Dedupe (two source routes can both contribute `(GET, /a)`)
-  3. Group atoms by path → reconstruct each path's effective method-set
-  4. Group paths by method-set → one bucket per distinct set
-  5. Trie/regex-compress and chunk paths within each bucket
-  6. Emit one rule per chunk with the bucket's method check ANDed in
-
-  Each path lands in exactly one bucket (and one rule), so total path
-  bytes across the policy are minimised. Real REST APIs typically have
-  ~5-6 distinct method-sets (`{GET}`, `{GET,POST}`, full-CRUD, etc.).
+      1000..1999  rate_based_ban rules (one per rate-limited route)
+      2000        posture allow rule (one rule, combined expression)
+      2147483647  default deny(403) — (method, path) gating handled by URL Map
   """
 
   @behaviour Wagger.Generator
 
-  alias Wagger.Generator.PathHelper
-
   @rate_rule_base_priority 1000
-  @allow_rule_base_priority 2000
-  @deny_all_priority 3000
+  @posture_allow_priority_base 2000
   @default_priority 2_147_483_647
-
-  # Cloud Armor limits we respect:
-  #   - CEL expression: 2048 chars total
-  #   - Inner regex (string passed to matches()): 1024 chars
-  #   - Sub-expressions: 5 per rule
-  # Inner regex is the tightest binding constraint. 950 leaves margin
-  # under 1024.
-  @max_inner_regex_chars 950
 
   @impl true
   def yang_module do
@@ -79,16 +58,15 @@ defmodule Wagger.Generator.Gcp do
     normalized = Enum.map(routes, &normalize/1)
 
     rate_rules = build_rate_rules(normalized)
-    allow_rules = build_allow_rules(normalized)
-    deny_all_rule = build_deny_all_rule()
+    posture_allow_rules = build_posture_allow_rules(config)
     default_rule = build_default_rule()
 
-    rules = rate_rules ++ allow_rules ++ [deny_all_rule, default_rule]
+    rules = rate_rules ++ posture_allow_rules ++ [default_rule]
 
     %{
       "gcp-armor-config" => %{
         "policy-name" => "#{prefix}-security-policy",
-        "description" => "WAF allowlist for #{prefix}",
+        "description" => "WAF policy for #{prefix}",
         "generated-at" => iso8601_now(),
         "rules" => rules
       }
@@ -146,7 +124,7 @@ defmodule Wagger.Generator.Gcp do
           []
 
         limit ->
-          regex = PathHelper.to_regex(route)
+          regex = Wagger.Generator.PathHelper.to_regex(route)
 
           [
             %{
@@ -167,110 +145,92 @@ defmodule Wagger.Generator.Gcp do
     end)
   end
 
-  defp build_allow_rules(normalized) do
-    buckets = PathHelper.partition_by_method_set(normalized, &PathHelper.to_regex/1)
+  defp build_posture_allow_rules(config) do
+    ip_ranges = config[:allow_ip_ranges] || config["allow_ip_ranges"]
+    regions = config[:allow_regions] || config["allow_regions"]
 
-    rules =
-      buckets
-      |> Enum.flat_map(fn {methods, regexes} ->
-        method_check = build_method_check(methods)
-        chunks = chunk_regexes(regexes, @max_inner_regex_chars)
+    ip_ranges = if ip_ranges == [], do: nil, else: ip_ranges
+    regions = if regions == [], do: nil, else: regions
 
-        Enum.map(chunks, fn chunk ->
-          combined_regex = Enum.join(chunk, "|")
-          expr = "#{method_check} && request.path.matches('#{combined_regex}')"
+    rule =
+      cond do
+        ip_ranges == nil and regions == nil ->
+          %{
+            "priority" => @posture_allow_priority_base,
+            "description" =>
+              "Permissive allow — Cloud Armor is defense-in-depth behind URL Map; (method, path) allowlisting handled there.",
+            "action" => "allow",
+            "cel-expression" => nil,
+            "match-type" => "versioned-expr",
+            "src-ip-ranges" => ["*"]
+          }
+
+        ip_ranges != nil and regions == nil ->
+          %{
+            "priority" => @posture_allow_priority_base,
+            "description" => "Allow declared IP ranges",
+            "action" => "allow",
+            "cel-expression" => nil,
+            "match-type" => "versioned-expr",
+            "src-ip-ranges" => ip_ranges
+          }
+
+        ip_ranges == nil and regions != nil ->
+          region_list = regions |> Enum.map(&"'#{&1}'") |> Enum.join(", ")
+          expr = "origin.region_code in [#{region_list}]"
 
           %{
-            "description" => "Allow #{Enum.join(methods, ",")} on known paths",
+            "priority" => @posture_allow_priority_base,
+            "description" => "Allow declared regions: #{Enum.join(regions, ", ")}",
             "action" => "allow",
             "cel-expression" => expr,
             "match-type" => "expr"
           }
-        end)
-      end)
 
-    total = length(rules)
+        true ->
+          # Both declared — AND the IP range checks with the region check
+          ip_checks =
+            ip_ranges
+            |> Enum.map(&"inIpRange(origin.ip, '#{&1}')")
+            |> Enum.join(" || ")
 
-    rules
-    |> Enum.with_index()
-    |> Enum.map(fn {rule, idx} ->
-      rule
-      |> Map.put("priority", @allow_rule_base_priority + idx)
-      |> Map.update!("description", &"#{&1} (chunk #{idx + 1}/#{total})")
-    end)
+          ip_expr = if length(ip_ranges) > 1, do: "(#{ip_checks})", else: ip_checks
+          region_list = regions |> Enum.map(&"'#{&1}'") |> Enum.join(", ")
+          expr = "(origin.region_code in [#{region_list}]) && #{ip_expr}"
+
+          %{
+            "priority" => @posture_allow_priority_base,
+            "description" =>
+              "Allow declared regions (#{Enum.join(regions, ", ")}) AND IP ranges (#{Enum.join(ip_ranges, ", ")})",
+            "action" => "allow",
+            "cel-expression" => expr,
+            "match-type" => "expr"
+          }
+      end
+
+    [rule]
   end
 
-  defp build_method_check([single]), do: "request.method == '#{single}'"
-
-  defp build_method_check(methods) do
-    list = methods |> Enum.map(&"'#{&1}'") |> Enum.join(", ")
-    "request.method in [#{list}]"
-  end
-
-  defp build_deny_all_rule do
+  defp build_default_rule do
     %{
-      "priority" => @deny_all_priority,
-      "description" => "Block all paths not matched above",
+      "priority" => @default_priority,
+      "description" => "Default deny — (method, path) allowlisting handled by URL Map",
       "action" => "deny(403)",
       "cel-expression" => nil,
       "match-type" => "versioned-expr"
     }
   end
 
-  defp build_default_rule do
-    %{
-      "priority" => @default_priority,
-      "description" => "Cloud Armor default rule (unreachable due to deny-all above; required by API)",
-      "action" => "allow",
-      "cel-expression" => nil,
-      "match-type" => "versioned-expr"
-    }
-  end
-
-  # ---------------------------------------------------------------------------
-  # Chunking
-  # ---------------------------------------------------------------------------
-
-  # Greedy bin-packing for regex alternation. Each chunk's combined regex
-  # is `r1|r2|...|rN`; size is sum(len(ri)) + (N-1) for the `|` separators.
-  # Caller passes the budget for the inner regex (excludes the wrapping
-  # `request.path.matches('...')`).
-  defp chunk_regexes(regexes, max_chars) do
-    {chunks, last} =
-      Enum.reduce(regexes, {[], {[], 0}}, fn regex, {chunks, {cur, cur_size}} ->
-        term_size = String.length(regex)
-        sep_size = if cur == [], do: 0, else: 1
-        new_size = cur_size + sep_size + term_size
-
-        cond do
-          cur == [] ->
-            {chunks, {[regex], term_size}}
-
-          new_size <= max_chars ->
-            {chunks, {[regex | cur], new_size}}
-
-          true ->
-            {[Enum.reverse(cur) | chunks], {[regex], term_size}}
-        end
-      end)
-
-    final =
-      case last do
-        {[], _} -> chunks
-        {cur, _} -> [Enum.reverse(cur) | chunks]
-      end
-
-    Enum.reverse(final)
-  end
-
   # ---------------------------------------------------------------------------
   # Match shape
   # ---------------------------------------------------------------------------
 
-  defp build_match(%{"match-type" => "versioned-expr"}) do
+  defp build_match(%{"match-type" => "versioned-expr"} = rule) do
+    src_ip_ranges = Map.get(rule, "src-ip-ranges", ["*"])
+
     %{
       "versionedExpr" => "SRC_IPS_V1",
-      "config" => %{"srcIpRanges" => ["*"]}
+      "config" => %{"srcIpRanges" => src_ip_ranges}
     }
   end
 
