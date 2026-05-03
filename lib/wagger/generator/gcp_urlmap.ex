@@ -47,10 +47,11 @@ defmodule Wagger.Generator.GcpUrlMap do
   ## Backend-ref placeholders
 
   The generator emits placeholder strings when real backend service refs are
-  not supplied:
+  not supplied (defaults to `@known_traffic_backend_placeholder` and
+  `@deny_backend_placeholder`):
 
-  - `__KNOWN_TRAFFIC_BACKEND__` — routed to by all permit `routeRules`
-  - `__DENY_BACKEND__` — routed to by the default-deny catch-all and used as
+  - `@known_traffic_backend_placeholder` — routed to by all permit `routeRules`
+  - `@deny_backend_placeholder` — routed to by the default-deny catch-all and used as
     the URL Map's `defaultService`
 
   The deployer substitutes fully-qualified refs such as
@@ -62,6 +63,9 @@ defmodule Wagger.Generator.GcpUrlMap do
   @behaviour Wagger.Generator
 
   alias Wagger.Generator.PathHelper
+
+  @known_traffic_backend_placeholder "__KNOWN_TRAFFIC_BACKEND__"
+  @deny_backend_placeholder "__DENY_BACKEND__"
 
   @impl true
   def yang_module do
@@ -76,12 +80,12 @@ defmodule Wagger.Generator.GcpUrlMap do
     known_traffic_backend =
       config[:known_traffic_backend] ||
         config["known_traffic_backend"] ||
-        "__KNOWN_TRAFFIC_BACKEND__"
+        @known_traffic_backend_placeholder
 
     deny_backend =
       config[:deny_backend] ||
         config["deny_backend"] ||
-        "__DENY_BACKEND__"
+        @deny_backend_placeholder
 
     normalized = Enum.map(routes, &normalize/1)
 
@@ -199,7 +203,7 @@ defmodule Wagger.Generator.GcpUrlMap do
       template = convert_params_to_template(path)
       %{"path-template-match" => template}
     else
-      %{"path-match" => path}
+      %{"full-path-match" => path}
     end
   end
 
@@ -237,8 +241,8 @@ defmodule Wagger.Generator.GcpUrlMap do
         Map.has_key?(mr, "path-template-match") ->
           %{"pathTemplateMatch" => mr["path-template-match"]}
 
-        Map.has_key?(mr, "path-match") ->
-          %{"fullPathMatch" => mr["path-match"]}
+        Map.has_key?(mr, "full-path-match") ->
+          %{"fullPathMatch" => mr["full-path-match"]}
 
         Map.has_key?(mr, "prefix-match") ->
           %{"prefixMatch" => mr["prefix-match"]}
