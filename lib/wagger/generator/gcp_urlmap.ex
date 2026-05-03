@@ -89,7 +89,12 @@ defmodule Wagger.Generator.GcpUrlMap do
 
     {route_rules, next_priority} =
       Enum.reduce(buckets, {[], 1}, fn {methods, bucket_routes}, {acc, priority} ->
-        match_rules = Enum.map(bucket_routes, &build_match_rule(&1, methods))
+        match_rules =
+          bucket_routes
+          |> Enum.with_index()
+          |> Enum.map(fn {route, idx} ->
+            build_match_rule(route, methods, "mr-#{idx}")
+          end)
 
         rule = %{
           "priority" => priority,
@@ -105,7 +110,9 @@ defmodule Wagger.Generator.GcpUrlMap do
       "priority" => next_priority,
       "description" => "Default deny — unmatched (method, path) routed to deny backend",
       "service" => deny_backend,
-      "match-rules" => []
+      "match-rules" => [
+        %{"match-rule-id" => "mr-0", "path-template-match" => "/{path=**}"}
+      ]
     }
 
     route_rules_final = route_rules ++ [default_deny]
@@ -178,11 +185,13 @@ defmodule Wagger.Generator.GcpUrlMap do
   # Match-rule builders
   # ---------------------------------------------------------------------------
 
-  defp build_match_rule(route, methods) do
+  defp build_match_rule(route, methods, id) do
     path_predicate = build_path_predicate(route)
     header_match = build_header_match(methods)
 
-    Map.merge(path_predicate, %{"header-matches" => [header_match]})
+    path_predicate
+    |> Map.put("match-rule-id", id)
+    |> Map.merge(%{"header-matches" => [header_match]})
   end
 
   defp build_path_predicate(%{path: path, path_type: "exact"}) do
@@ -252,7 +261,11 @@ defmodule Wagger.Generator.GcpUrlMap do
         end
       end)
 
-    Map.put(path_part, "headerMatches", header_matches)
+    if header_matches == [] do
+      path_part
+    else
+      Map.put(path_part, "headerMatches", header_matches)
+    end
   end
 
   # ---------------------------------------------------------------------------

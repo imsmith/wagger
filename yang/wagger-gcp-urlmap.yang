@@ -115,6 +115,7 @@ module wagger-gcp-urlmap {
         }
 
         list match-rules {
+          key "match-rule-id";
           ordered-by user;
           description
             "Ordered match conditions for this route-rule. GCP applies
@@ -122,6 +123,11 @@ module wagger-gcp-urlmap {
              Exactly one of path-template-match, path-match, prefix-match,
              or regex-match must be present in each entry. Order is
              significant: the generator emits entries in priority order.";
+
+          leaf match-rule-id {
+            type string;
+            description "Synthetic ordering key — required by validator, not emitted to GCP JSON.";
+          }
 
           leaf path-template-match {
             type string;
