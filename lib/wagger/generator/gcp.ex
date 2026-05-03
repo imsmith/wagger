@@ -26,11 +26,28 @@ defmodule Wagger.Generator.Gcp do
   Limit (3) is the tightest. We pack alternation inside ONE `matches()`
   call so we stay at one sub-expression per rule:
 
-      request.path.matches('^/p1$|^/p2$|...|^/pN$')
+      request.method in ['GET', 'POST'] && request.path.matches('^/p1$|^/p2$|...|^/pN$')
 
   Chunk so each combined regex stays under ~950 chars (margin under 1024).
-  At ~30-40 chars per path, this fits ~25-30 paths per rule. Cloud Armor's
-  per-policy rule limit is 200, so this scales to ~5-6k paths comfortably.
+  At ~30-40 chars per path, this fits ~25-30 paths per rule. The method
+  check costs one additional sub-expression (the `&&` joins two operands),
+  well within the 5-per-rule budget.
+
+  ## Method enforcement and bucketing
+
+  The semantic key for each allow entry is `(method, path)`, not `path`
+  alone. To pack densely, we partition routes by their method-set:
+
+  1. Explode each declared route into atomic `(method, path)` pairs
+  2. Dedupe (two source routes can both contribute `(GET, /a)`)
+  3. Group atoms by path → reconstruct each path's effective method-set
+  4. Group paths by method-set → one bucket per distinct set
+  5. Trie/regex-compress and chunk paths within each bucket
+  6. Emit one rule per chunk with the bucket's method check ANDed in
+
+  Each path lands in exactly one bucket (and one rule), so total path
+  bytes across the policy are minimised. Real REST APIs typically have
+  ~5-6 distinct method-sets (`{GET}`, `{GET,POST}`, full-CRUD, etc.).
   """
 
   @behaviour Wagger.Generator
@@ -60,10 +77,9 @@ defmodule Wagger.Generator.Gcp do
   def map_routes(routes, config) do
     prefix = config[:prefix] || config["prefix"]
     normalized = Enum.map(routes, &normalize/1)
-    regexes = Enum.map(normalized, &PathHelper.to_regex/1)
 
     rate_rules = build_rate_rules(normalized)
-    allow_rules = build_allow_rules(regexes)
+    allow_rules = build_allow_rules(normalized)
     deny_all_rule = build_deny_all_rule()
     default_rule = build_default_rule()
 
@@ -151,24 +167,63 @@ defmodule Wagger.Generator.Gcp do
     end)
   end
 
-  defp build_allow_rules(regexes) do
-    chunks = chunk_regexes(regexes, @max_inner_regex_chars)
-    total = length(chunks)
+  defp build_allow_rules(normalized) do
+    buckets = partition_by_method_set(normalized)
 
-    chunks
+    rules =
+      buckets
+      |> Enum.flat_map(fn {methods, regexes} ->
+        method_check = build_method_check(methods)
+        chunks = chunk_regexes(regexes, @max_inner_regex_chars)
+
+        Enum.map(chunks, fn chunk ->
+          combined_regex = Enum.join(chunk, "|")
+          expr = "#{method_check} && request.path.matches('#{combined_regex}')"
+
+          %{
+            "description" => "Allow #{Enum.join(methods, ",")} on known paths",
+            "action" => "allow",
+            "cel-expression" => expr,
+            "match-type" => "expr"
+          }
+        end)
+      end)
+
+    total = length(rules)
+
+    rules
     |> Enum.with_index()
-    |> Enum.map(fn {chunk, idx} ->
-      combined_regex = Enum.join(chunk, "|")
-      expr = "request.path.matches('#{combined_regex}')"
-
-      %{
-        "priority" => @allow_rule_base_priority + idx,
-        "description" => "Allow known paths (chunk #{idx + 1}/#{total})",
-        "action" => "allow",
-        "cel-expression" => expr,
-        "match-type" => "expr"
-      }
+    |> Enum.map(fn {rule, idx} ->
+      rule
+      |> Map.put("priority", @allow_rule_base_priority + idx)
+      |> Map.update!("description", &"#{&1} (chunk #{idx + 1}/#{total})")
     end)
+  end
+
+  # Explode routes to atomic (method, path) pairs, then re-cluster by path
+  # to reconstruct each path's effective method-set, then bucket paths by
+  # their reconstructed method-set. Returns a list of {sorted_methods,
+  # [regex, ...]} tuples in deterministic order so rule priorities are
+  # stable across runs.
+  defp partition_by_method_set(normalized) do
+    normalized
+    |> Enum.flat_map(fn r -> Enum.map(r.methods, &{&1, r}) end)
+    |> Enum.uniq_by(fn {m, r} -> {m, r.path} end)
+    |> Enum.group_by(fn {_, r} -> r.path end)
+    |> Enum.map(fn {_path, atoms} ->
+      methods = atoms |> Enum.map(&elem(&1, 0)) |> Enum.sort() |> Enum.uniq()
+      route = atoms |> List.first() |> elem(1)
+      {methods, PathHelper.to_regex(route)}
+    end)
+    |> Enum.group_by(fn {methods, _} -> methods end, fn {_, regex} -> regex end)
+    |> Enum.sort_by(fn {methods, _} -> methods end)
+  end
+
+  defp build_method_check([single]), do: "request.method == '#{single}'"
+
+  defp build_method_check(methods) do
+    list = methods |> Enum.map(&"'#{&1}'") |> Enum.join(", ")
+    "request.method in [#{list}]"
   end
 
   defp build_deny_all_rule do

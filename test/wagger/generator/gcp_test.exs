@@ -170,6 +170,122 @@ defmodule Wagger.Generator.GcpTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Method enforcement (allow rules must check (method, path), not path alone)
+  # ---------------------------------------------------------------------------
+
+  describe "method enforcement on allow rules" do
+    test "every allow rule references request.method" do
+      instance = Gcp.map_routes(@routes, @config)
+      rules = instance["gcp-armor-config"]["rules"]
+      allow_rules = Enum.filter(rules, &(&1["priority"] >= 2000 and &1["priority"] < 3000))
+
+      for rule <- allow_rules do
+        assert rule["cel-expression"] =~ "request.method",
+               "allow rule does not check method: #{rule["cel-expression"]}"
+      end
+    end
+
+    test "routes with distinct method-sets emit distinct allow rules" do
+      routes = [
+        %{path: "/a", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/b", methods: ["POST"], path_type: "exact", rate_limit: nil}
+      ]
+
+      instance = Gcp.map_routes(routes, @config)
+      rules = instance["gcp-armor-config"]["rules"]
+      allow_rules = Enum.filter(rules, &(&1["priority"] >= 2000 and &1["priority"] < 3000))
+
+      assert length(allow_rules) >= 2,
+             "expected at least 2 allow rules for distinct method-sets, got #{length(allow_rules)}"
+
+      # Each allow rule should reference exactly one method-set
+      get_rule = Enum.find(allow_rules, &(&1["cel-expression"] =~ "/a"))
+      post_rule = Enum.find(allow_rules, &(&1["cel-expression"] =~ "/b"))
+
+      assert get_rule["cel-expression"] =~ "'GET'"
+      refute get_rule["cel-expression"] =~ "'POST'"
+      assert post_rule["cel-expression"] =~ "'POST'"
+      refute post_rule["cel-expression"] =~ "'GET'"
+    end
+
+    test "routes sharing a method-set are packed in the same allow rule" do
+      routes = [
+        %{path: "/a", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/b", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/c", methods: ["GET"], path_type: "exact", rate_limit: nil}
+      ]
+
+      instance = Gcp.map_routes(routes, @config)
+      rules = instance["gcp-armor-config"]["rules"]
+      allow_rules = Enum.filter(rules, &(&1["priority"] >= 2000 and &1["priority"] < 3000))
+
+      # Three GET-only routes should fit in one rule
+      assert length(allow_rules) == 1
+      expr = hd(allow_rules)["cel-expression"]
+      assert expr =~ "/a"
+      assert expr =~ "/b"
+      assert expr =~ "/c"
+    end
+
+    test "atomic explosion: [GET,POST] /a equivalent to [GET] /a + [POST] /a" do
+      multi = [
+        %{path: "/a", methods: ["GET", "POST"], path_type: "exact", rate_limit: nil}
+      ]
+
+      atomic = [
+        %{path: "/a", methods: ["GET"], path_type: "exact", rate_limit: nil},
+        %{path: "/a", methods: ["POST"], path_type: "exact", rate_limit: nil}
+      ]
+
+      multi_rules =
+        Gcp.map_routes(multi, @config)["gcp-armor-config"]["rules"]
+        |> Enum.filter(&(&1["priority"] >= 2000 and &1["priority"] < 3000))
+        |> Enum.map(& &1["cel-expression"])
+        |> Enum.sort()
+
+      atomic_rules =
+        Gcp.map_routes(atomic, @config)["gcp-armor-config"]["rules"]
+        |> Enum.filter(&(&1["priority"] >= 2000 and &1["priority"] < 3000))
+        |> Enum.map(& &1["cel-expression"])
+        |> Enum.sort()
+
+      assert multi_rules == atomic_rules
+    end
+
+    test "method check + matches() stays within 5 sub-expression limit" do
+      instance = Gcp.map_routes(@routes, @config)
+      rules = instance["gcp-armor-config"]["rules"]
+      allow_rules = Enum.filter(rules, &(&1["priority"] >= 2000 and &1["priority"] < 3000))
+
+      for rule <- allow_rules do
+        expr = rule["cel-expression"]
+
+        cel_or = expr |> String.split(" || ") |> length() |> Kernel.-(1)
+        cel_and = expr |> String.split(" && ") |> length() |> Kernel.-(1)
+        sub_expr_count = cel_or + cel_and + 1
+
+        assert sub_expr_count <= 5,
+               "rule has #{sub_expr_count} sub-expressions; Cloud Armor limit is 5"
+      end
+    end
+
+    test "method-set with multiple methods uses 'in' list" do
+      routes = [
+        %{path: "/a", methods: ["GET", "POST"], path_type: "exact", rate_limit: nil}
+      ]
+
+      instance = Gcp.map_routes(routes, @config)
+      rules = instance["gcp-armor-config"]["rules"]
+      allow_rules = Enum.filter(rules, &(&1["priority"] >= 2000 and &1["priority"] < 3000))
+
+      expr = hd(allow_rules)["cel-expression"]
+      assert expr =~ "request.method in"
+      assert expr =~ "'GET'"
+      assert expr =~ "'POST'"
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Full pipeline tests via Generator.generate/3
   # ---------------------------------------------------------------------------
 
