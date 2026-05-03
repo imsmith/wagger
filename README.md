@@ -6,6 +6,14 @@ Eight generators ship today -- AWS WAF, Cloudflare, Azure Front Door, GCP Cloud 
 
 Import routes from OpenAPI specs, bulk text, or access logs. Share API definitions through the public Hub. Get notified when your routes drift from the last generated config.
 
+## GCP
+
+Wagger emits two artifacts for GCP: `gcp-armor.json` (Cloud Armor security policy — rate limiting, IP/geo posture, defense-in-depth) and `gcp-urlmap.json` (URL Map fragment — the default-deny gate for `(method, path)` allowlisting via `pathTemplateMatch` + `:method` headerMatches).
+
+Deployment sketch: URL Map attaches to the Global External HTTPS Load Balancer; Cloud Armor attaches to the known-traffic `backendServices` referenced by the URL Map's matched routeRules. The deployer provides a deny backend (a small Cloud Run service or serverless NEG returning 403) referenced by the URL Map's `defaultService` and `pathMatchers[].defaultService` and the URL Map's final default-deny route-rule's `service`. Wagger emits placeholders `__KNOWN_TRAFFIC_BACKEND__` and `__DENY_BACKEND__` (overridable via config) which the deployer substitutes for real `projects/PROJECT_ID/.../backendServices/...` refs.
+
+Targets Global External Application Load Balancer and other modern ALB variants where `pathTemplateMatch` is supported. Classic ALB is unsupported by `Wagger.Generator.GcpUrlMap` because `pathTemplateMatch` is unavailable there; users on Classic ALB can use `Wagger.Generator.Gcp` (Cloud Armor) alone, but with much tighter scaling limits on the path allowlist.
+
 For the full story -- why the architecture looks the way it does, how the generators work under the hood, and what the YANG validation layer is about -- read the [literate program](docs/waf-rule-generator-literate.md).
 
 ## Running it
