@@ -119,6 +119,70 @@ defmodule Wagger.Generator.PathHelper do
     {:regex, path}
   end
 
+  @doc """
+  Partitions routes by their effective method-set, using explode-then-cluster bucketing.
+
+  The semantic key for grouping is `{method, path}`: two routes can map to the same
+  key if they both declare the same method for the same path, even if they are
+  separate route records. This function deduplicates and re-groups by path to
+  reconstruct the full method-set for each path, then buckets paths by their
+  effective method-set.
+
+  ## Algorithm (4 steps)
+
+  1. **Explode**: Each route's `methods` list is expanded into atomic `{method, route}`
+     pairs. A route declaring `methods: ["GET", "POST"]` for `/a` produces two atoms.
+
+  2. **Dedupe**: Atoms are deduplicated by `{method, path}`. If two distinct source
+     routes both contribute `{GET, /a}`, only one survives.
+
+  3. **Group by path**: Atoms are grouped by `route.path`, reconstructing the
+     effective method-set for each path (sorted, unique union of all methods
+     seen for that path).
+
+  4. **Bucket by method-set**: Paths are then grouped by their reconstructed
+     method-set, creating one bucket per distinct set. Each bucket is a list
+     of mapped paths. Buckets are sorted by method-set for deterministic output.
+
+  ## Arguments
+
+  - `routes`: A list of route records (maps with `path` and `methods` keys).
+    Each route's `methods` is a list of HTTP method strings.
+
+  - `mapper`: A 1-arity function that projects a route record to the desired path
+    representation. Called once per unique `path` with the first route record for
+    that path, allowing callers to project paths as needed (e.g., as a regex,
+    full route object, raw path string, etc.).
+
+  ## Return value
+
+  A list of `{sorted_methods, [mapped_path, ...]}` tuples, sorted by method-set.
+  Each bucket contains all mapped paths sharing the same effective method-set.
+
+  ## Examples
+
+      iex> routes = [
+      ...>   %{path: "/a", methods: ["GET", "POST"], path_type: "exact"},
+      ...>   %{path: "/b", methods: ["GET"], path_type: "exact"}
+      ...> ]
+      iex> Wagger.Generator.PathHelper.partition_by_method_set(routes, & &1.path)
+      [{["GET"], ["/b"]}, {["GET", "POST"], ["/a"]}]
+
+  """
+  def partition_by_method_set(routes, mapper) when is_function(mapper, 1) do
+    routes
+    |> Enum.flat_map(fn r -> Enum.map(r.methods, &{&1, r}) end)
+    |> Enum.uniq_by(fn {m, r} -> {m, r.path} end)
+    |> Enum.group_by(fn {_, r} -> r.path end)
+    |> Enum.map(fn {_path, atoms} ->
+      methods = atoms |> Enum.map(&elem(&1, 0)) |> Enum.sort() |> Enum.uniq()
+      route = atoms |> List.first() |> elem(1)
+      {methods, mapper.(route)}
+    end)
+    |> Enum.group_by(fn {methods, _} -> methods end, fn {_, mapped} -> mapped end)
+    |> Enum.sort_by(fn {methods, _} -> methods end)
+  end
+
   # Helper functions
 
   defp convert_params_to_regex(path) do
