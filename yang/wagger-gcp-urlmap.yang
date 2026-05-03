@@ -1,0 +1,192 @@
+module wagger-gcp-urlmap {
+  namespace "urn:wagger:gcp-urlmap";
+  prefix wgur;
+
+  organization "Wagger Project";
+  description
+    "Data model for GCP HTTP(S) Load Balancer URL Map configuration.
+
+     Targets the GCP Global External Application Load Balancer (and other
+     modern ALB variants). Classic ALB is not supported because
+     pathTemplateMatch is unavailable there.
+
+     The top-level container gcp-urlmap-config describes the output shape
+     emitted by Wagger.Generator.GcpUrlMap and consumed by
+     gcloud compute url-maps import.";
+
+  revision 2026-05-03 {
+    description "Initial revision.";
+  }
+
+  container gcp-urlmap-config {
+    description "Top-level GCP HTTP(S) Load Balancer URL Map configuration.";
+
+    leaf url-map-name {
+      type string;
+      mandatory true;
+      description "Name of the URL Map resource (e.g. my-api-allowlist).";
+    }
+
+    leaf description {
+      type string;
+      description "Human-readable description of the URL Map.";
+    }
+
+    leaf generated-at {
+      type string;
+      description "ISO 8601 timestamp of generation.";
+    }
+
+    leaf default-service {
+      type string;
+      mandatory true;
+      description
+        "Backend service ref for traffic not matched by any host-rule or
+         path-matcher. Typically a deny backend placeholder such as
+         __DENY_BACKEND__ or a fully-qualified resource ref like
+         projects/PROJECT_ID/global/backendServices/deny-backend.";
+    }
+
+    list host-rules {
+      ordered-by user;
+      description
+        "Associates a set of hostnames with a named path-matcher. GCP
+         evaluates host-rules in order; the first matching host-rule
+         selects the path-matcher to use. Multiple host-rules may
+         reference the same path-matcher-name, so the natural identity
+         is the host set, not the matcher reference — this list is
+         therefore keyless and ordered by the user.";
+
+      leaf path-matcher-name {
+        type string;
+        mandatory true;
+        description "Name of the path-matcher to use when a host matches.";
+      }
+
+      leaf-list hosts {
+        type string;
+        min-elements 1;
+        description
+          "Hostnames matched by this rule. Use [\"*\"] to match all hosts.";
+      }
+    }
+
+    list path-matchers {
+      key "name";
+      description
+        "Named path-matchers that contain ordered route-rules. Each
+         path-matcher is referenced by one or more host-rules.";
+
+      leaf name {
+        type string;
+        mandatory true;
+        description "Unique name for this path-matcher.";
+      }
+
+      leaf default-service {
+        type string;
+        description
+          "Backend service ref for requests not matched by any route-rule
+           within this path-matcher. Typically the deny backend.";
+      }
+
+      list route-rules {
+        key "priority";
+        description
+          "Ordered route-rules within this path-matcher. Lower priority
+           values are evaluated first.";
+
+        leaf priority {
+          type uint32;
+          mandatory true;
+          description "Evaluation priority. Lower value fires first.";
+        }
+
+        leaf description {
+          type string;
+          description "Human-readable description of this route-rule.";
+        }
+
+        leaf service {
+          type string;
+          description
+            "Backend service ref for matched requests. Typically the
+             allow (known-traffic) backend.";
+        }
+
+        list match-rules {
+          ordered-by user;
+          description
+            "Ordered match conditions for this route-rule. GCP applies
+             the route-rule when any match-rule in the list matches.
+             Exactly one of path-template-match, path-match, prefix-match,
+             or regex-match must be present in each entry. Order is
+             significant: the generator emits entries in priority order.";
+
+          leaf path-template-match {
+            type string;
+            description
+              "Path template match string supporting {param=*} wildcards
+               (e.g. /api/v1/{resource=**}). Available on Global External
+               ALB only; not supported on Classic ALB.
+               Maps to matchRules[].pathTemplateMatch.";
+          }
+
+          leaf path-match {
+            type string;
+            description
+              "Exact path match string (e.g. /api/v1/users). The full
+               path must match exactly.
+               Maps to matchRules[].fullPathMatch.";
+          }
+
+          leaf prefix-match {
+            type string;
+            description
+              "Prefix path match string (e.g. /api/v1/). Matches any
+               path beginning with this prefix.
+               Maps to matchRules[].prefixMatch.";
+          }
+
+          leaf regex-match {
+            type string;
+            description
+              "RE2 regular expression path match. Escape-hatch for paths
+               that cannot be expressed as template, exact, or prefix.
+               Maps to matchRules[].regexMatch.";
+          }
+
+          list header-matches {
+            key "header-name";
+            description
+              "Header conditions that must all match in addition to the
+               path condition. Exactly one of exact-match or regex-match
+               must be present in each entry.";
+
+            leaf header-name {
+              type string;
+              mandatory true;
+              description
+                "HTTP header name to match (e.g. :method for the
+                 pseudo-header carrying the HTTP method).";
+            }
+
+            leaf exact-match {
+              type string;
+              description
+                "Exact value the header must equal.
+                 Maps to headerMatches[].exactMatch.";
+            }
+
+            leaf regex-match {
+              type string;
+              description
+                "RE2 regular expression the header value must match.
+                 Maps to headerMatches[].regexMatch.";
+            }
+          }
+        }
+      }
+    }
+  }
+}
