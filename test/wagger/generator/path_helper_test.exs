@@ -5,6 +5,8 @@ defmodule Wagger.Generator.PathHelperTest do
 
   alias Wagger.Generator.PathHelper
 
+  doctest Wagger.Generator.PathHelper
+
   describe "to_regex/1" do
     test "exact path without params returns anchored regex" do
       route = %{path: "/api/users", path_type: "exact"}

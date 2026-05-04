@@ -3,11 +3,14 @@ defmodule Wagger.Generator.Azure do
   Azure Front Door WAF policy generator implementing the `Wagger.Generator` behaviour.
 
   Produces an Azure Front Door WAF policy JSON document with:
-  - A path-allowlist custom rule using `RegEx` operator with `negateCondition: true`,
-    blocking any request whose URI does not match one of the known route patterns
-  - Per-method-set `MethodEnforcementRule` entries (priority 2..N) that block
-    requests whose URI matches a bucket's paths but whose method is not in
-    the bucket's allowed method-set
+  - A path-allowlist custom rule (`MatchRule`, priority 1) using `RegEx` with
+    `negateCondition: true`, blocking any request whose URI does not match
+    one of the known route patterns
+  - Per-method-set method-enforcement rules (`MatchRule` named `<prefix>EnforceMethods<N>`,
+    priority 2..N) that block requests whose URI matches a bucket's paths but
+    whose method is not in the bucket's allowed method-set. Azure has no
+    dedicated rule type for this; the rules use `rule-type: "MatchRule"` and
+    are identified by the `EnforceMethods` name prefix.
   - Per-route `RateLimitRule` entries for routes that carry a `rate_limit` value;
     the limit is multiplied by 5 to express a 5-minute window (matching AWS behaviour)
   - Configurable `Prevention` or `Detection` mode via `config.mode`

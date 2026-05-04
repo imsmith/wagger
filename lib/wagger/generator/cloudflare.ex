@@ -3,14 +3,29 @@ defmodule Wagger.Generator.Cloudflare do
   Cloudflare firewall rules generator implementing the `Wagger.Generator` behaviour.
 
   Produces a JSON array of Cloudflare Ruleset Engine firewall rules with:
-  - A single `block` rule using `not (expr1 or expr2 or ...)` to allowlist known paths
+  - A single `block` rule whose expression negates a `(method, path)` allowlist
   - Optional `managed_challenge` rules per route for rate limiting
 
-  Expression language mapping:
+  ## Allowlist expression shape
+
+  Routes are partitioned by their effective HTTP method-set via
+  `Wagger.Generator.PathHelper.partition_by_method_set/2`. Each bucket emits one
+  OR-clause inside the negated block expression:
+
+      not ((<method-check-1> and (<path-1> or <path-2>)) or
+           (<method-check-2> and <path-3>) or ...)
+
+  Method check shape per bucket:
+  - Single-method bucket: `http.request.method eq "GET"`
+  - Multi-method bucket:  `http.request.method in {"GET" "POST"}`
+
+  Path expression mapping per route:
   - Exact path without params: `http.request.uri.path eq "/path"`
-  - Prefix path: `starts_with(http.request.uri.path, "/path")`
-  - Exact path with `{param}` placeholders or explicit regex type:
-    `http.request.uri.path matches "^regex$"`
+  - Prefix path:               `starts_with(http.request.uri.path, "/path/")`
+  - Exact with `{param}` or `regex` type: `http.request.uri.path matches "^regex$"`
+
+  Rate-limit `managed_challenge` rules bind to the path expression alone
+  (method enforcement on those is a separate concern).
   """
 
   @behaviour Wagger.Generator
