@@ -102,6 +102,88 @@
     <span class="font-mono"><%= if @app.route_checksum, do: String.slice(@app.route_checksum, 0, 12) <> "...", else: "no checksum" %></span>
   </div>
 
+  <%!-- Request lookup panel --%>
+  <div class="bg-base-200 border border-neutral rounded-lg p-4">
+    <div class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)] mb-3">
+      Request Lookup
+    </div>
+    <form phx-change="lookup_request" class="flex items-center gap-2">
+      <select
+        name="method"
+        class="bg-base-100 border border-neutral rounded px-2 py-1 text-xs font-mono text-base-content focus:border-primary focus:outline-none"
+      >
+        <%= for m <- ~w(GET POST PUT PATCH DELETE HEAD OPTIONS) do %>
+          <option value={m} selected={@lookup_method == m}><%= m %></option>
+        <% end %>
+      </select>
+      <input
+        name="path"
+        type="text"
+        value={@lookup_path}
+        placeholder="/api/users/123"
+        phx-debounce="300"
+        class="bg-base-100 border border-neutral rounded px-2 py-1 text-xs font-mono text-base-content focus:border-primary focus:outline-none flex-1"
+      />
+    </form>
+
+    <%= if @lookup_result do %>
+      <% result = @lookup_result %>
+      <div class="mt-3">
+        <%!-- Verdict badge --%>
+        <% {badge_class, badge_label} = case result.verdict do
+             :allowed -> {"bg-success/20 text-success border border-success/40", "ALLOWED"}
+             :method_not_allowed -> {"bg-warning/20 text-warning border border-warning/40", "METHOD NOT ALLOWED"}
+             :not_in_allowlist -> {"bg-error/20 text-error border border-error/40", "NOT IN ALLOWLIST"}
+           end %>
+        <div class={"inline-block text-xs font-semibold px-2 py-0.5 rounded #{badge_class} mb-2"}>
+          <%= badge_label %>
+        </div>
+
+        <%= if result.matches == [] do %>
+          <div class="text-xs text-[color:var(--tn-text-muted)]">
+            No declared route covers this request path.
+          </div>
+        <% else %>
+          <div class="space-y-1.5">
+            <%= for match <- result.matches do %>
+              <div class="bg-base-100 border border-neutral rounded px-3 py-2 text-xs font-mono">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <%= for m <- match.methods do %>
+                    <% pill_class = cond do
+                         m == result.method and match.method_allowed -> "bg-success/20 text-success border border-success/40"
+                         m == result.method -> "bg-error/20 text-error border border-error/40"
+                         true -> "bg-base-300 text-[color:var(--tn-text-muted)] border border-neutral"
+                       end %>
+                    <span class={"inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold #{pill_class}"}>
+                      <%= m %>
+                    </span>
+                  <% end %>
+                  <span class="text-base-content"><%= match.path %></span>
+                  <span class="text-[10px] text-[color:var(--tn-text-muted)] bg-base-300 px-1 py-0.5 rounded">
+                    <%= match.path_type %>
+                  </span>
+                  <%= if match.rate_limit do %>
+                    <span class="text-[10px] text-[color:var(--tn-text-muted)] bg-base-300 px-1 py-0.5 rounded">
+                      <%= match.rate_limit %>/min
+                    </span>
+                  <% end %>
+                  <%= if match.description do %>
+                    <span class="text-[color:var(--tn-text-muted)] ml-auto"><%= match.description %></span>
+                  <% end %>
+                </div>
+                <%= if result.verdict == :method_not_allowed and not match.method_allowed do %>
+                  <div class="mt-1 text-[10px] text-warning">
+                    <%= result.method %> is not in this route's declared methods
+                  </div>
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+
   <%!-- Route treemap section --%>
   <div>
     <div class="flex items-center justify-between mb-3">

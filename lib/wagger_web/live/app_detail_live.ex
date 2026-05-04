@@ -51,7 +51,10 @@ defmodule WaggerWeb.AppDetailLive do
         show_import: false,
         all_providers: @providers,
         active_nav: nil,
-        editing_field: nil
+        editing_field: nil,
+        lookup_method: "GET",
+        lookup_path: "",
+        lookup_result: nil
       )
 
     {:ok, socket}
@@ -131,6 +134,20 @@ defmodule WaggerWeb.AppDetailLive do
       end
 
     {:noreply, assign(socket, search_query: query, search_results: results)}
+  end
+
+  # -- Request lookup events --
+
+  @impl true
+  def handle_event("lookup_request", %{"method" => method, "path" => path}, socket) do
+    result =
+      if String.trim(path) == "" do
+        nil
+      else
+        Routes.lookup_for_request(socket.assigns.app, method, path)
+      end
+
+    {:noreply, assign(socket, lookup_method: method, lookup_path: path, lookup_result: result)}
   end
 
   # -- Provider events --

@@ -101,7 +101,7 @@ defmodule WaggerWeb.AppDetailLiveTest do
     test "search finds routes across tree", %{conn: conn, app: app} do
       {:ok, lv, _html} = live(conn, ~p"/applications/#{app.id}")
 
-      html = lv |> form("form", %{query: "health"}) |> render_change()
+      html = lv |> form("form[phx-change=search_routes]", %{query: "health"}) |> render_change()
 
       assert html =~ "/health"
       assert html =~ "GET"
@@ -176,6 +176,68 @@ defmodule WaggerWeb.AppDetailLiveTest do
       assert types["prefix"] == :text
       assert types["known_traffic_backend"] == :text
       assert types["deny_backend"] == :text
+    end
+  end
+
+  describe "Request lookup panel" do
+    test "renders the lookup panel with method dropdown and path input", %{conn: conn, app: app} do
+      {:ok, _lv, html} = live(conn, ~p"/applications/#{app.id}")
+
+      assert html =~ "Request Lookup"
+      assert html =~ "GET"
+      assert html =~ ~s(placeholder="/api/users/123")
+    end
+
+    test "submitting GET /api/users returns :allowed verdict", %{conn: conn, app: app} do
+      {:ok, lv, _html} = live(conn, ~p"/applications/#{app.id}")
+
+      html = lv |> form("form[phx-change=lookup_request]", %{method: "GET", path: "/api/users"}) |> render_change()
+
+      assert html =~ "ALLOWED"
+      assert html =~ "/api/users"
+    end
+
+    test "submitting DELETE /api/users returns :method_not_allowed (route only allows GET/POST)",
+         %{conn: conn, app: app} do
+      {:ok, lv, _html} = live(conn, ~p"/applications/#{app.id}")
+
+      html =
+        lv
+        |> form("form[phx-change=lookup_request]", %{method: "DELETE", path: "/api/users"})
+        |> render_change()
+
+      assert html =~ "METHOD NOT ALLOWED"
+    end
+
+    test "submitting a path with no matching route returns :not_in_allowlist",
+         %{conn: conn, app: app} do
+      {:ok, lv, _html} = live(conn, ~p"/applications/#{app.id}")
+
+      html =
+        lv
+        |> form("form[phx-change=lookup_request]", %{method: "GET", path: "/totally/unknown"})
+        |> render_change()
+
+      assert html =~ "NOT IN ALLOWLIST"
+    end
+
+    test "empty path clears the result", %{conn: conn, app: app} do
+      {:ok, lv, _html} = live(conn, ~p"/applications/#{app.id}")
+
+      # First perform a lookup
+      lv
+      |> form("form[phx-change=lookup_request]", %{method: "GET", path: "/api/users"})
+      |> render_change()
+
+      # Now clear the path
+      html =
+        lv
+        |> form("form[phx-change=lookup_request]", %{method: "GET", path: ""})
+        |> render_change()
+
+      # Verdict badge should be gone
+      refute html =~ "ALLOWED"
+      refute html =~ "NOT IN ALLOWLIST"
     end
   end
 

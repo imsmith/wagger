@@ -44,6 +44,7 @@ defmodule WaggerWeb.Router do
     end
 
     get "/applications/:application_id/export", ExportController, :show
+    get "/applications/:application_id/lookup", LookupController, :show
 
     post "/applications/:application_id/import/bulk", ImportController, :bulk
     post "/applications/:application_id/import/openapi", ImportController, :openapi

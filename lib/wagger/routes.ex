@@ -12,6 +12,24 @@ defmodule Wagger.Routes do
   alias Wagger.Repo
   alias Wagger.Applications.Application
   alias Wagger.Applications.Route
+  alias Wagger.Generator.PathHelper
+
+  @type lookup_match :: %{
+          route_id: integer(),
+          path: String.t(),
+          path_type: String.t(),
+          methods: [String.t()],
+          method_allowed: boolean(),
+          rate_limit: integer() | nil,
+          description: String.t() | nil
+        }
+
+  @type lookup_result :: %{
+          verdict: :allowed | :method_not_allowed | :not_in_allowlist,
+          method: String.t(),
+          path: String.t(),
+          matches: [lookup_match()]
+        }
 
   @doc """
   Returns all routes for the given application, optionally filtered.
@@ -120,6 +138,87 @@ defmodule Wagger.Routes do
       Wagger.Events.route_changed(:deleted, deleted)
       {:ok, deleted}
     end
+  end
+
+  @doc """
+  Looks up which declared route(s) match a given HTTP method and request path.
+
+  Normalises the input method to uppercase, then tests each route's compiled
+  regex (via `PathHelper.to_regex/1`) against the path. Returns a structured
+  map with:
+
+  - `verdict` — `:allowed` if any match allows the method, `:method_not_allowed`
+    if matches exist but none allow the method, `:not_in_allowlist` if no route
+    path matches at all.
+  - `method` — the normalised (uppercased) input method.
+  - `path` — the input path, unchanged.
+  - `matches` — list of matching routes, sorted most-specific first (exact <
+    prefix < regex, then by declared path length descending within each type).
+
+  ## Examples
+
+      iex> lookup_for_request(app, "get", "/api/users/123")
+      %{
+        verdict: :allowed,
+        method: "GET",
+        path: "/api/users/123",
+        matches: [%{route_id: 1, path: "/api/users/{id}", ...}]
+      }
+
+  """
+  @spec lookup_for_request(Application.t(), String.t(), String.t()) :: lookup_result()
+  def lookup_for_request(%Application{} = app, method, path)
+      when is_binary(method) and is_binary(path) do
+    method_upper = String.upcase(method)
+    routes = list_routes(app)
+
+    matches =
+      routes
+      |> Enum.filter(&path_matches?(&1, path))
+      |> Enum.map(&build_match(&1, method_upper))
+      |> sort_by_specificity()
+
+    verdict =
+      cond do
+        matches == [] -> :not_in_allowlist
+        Enum.any?(matches, & &1.method_allowed) -> :allowed
+        true -> :method_not_allowed
+      end
+
+    %{verdict: verdict, method: method_upper, path: path, matches: matches}
+  end
+
+  # -- private helpers for lookup --
+
+  @specificity_order %{"exact" => 0, "prefix" => 1, "regex" => 2}
+
+  defp path_matches?(route, path) do
+    regex_str = PathHelper.to_regex(route)
+
+    case Regex.compile(regex_str) do
+      {:ok, regex} -> Regex.match?(regex, path)
+      {:error, _} -> false
+    end
+  end
+
+  defp build_match(route, method_upper) do
+    %{
+      route_id: route.id,
+      path: route.path,
+      path_type: route.path_type,
+      methods: route.methods,
+      method_allowed: method_upper in route.methods,
+      rate_limit: route.rate_limit,
+      description: route.description
+    }
+  end
+
+  defp sort_by_specificity(matches) do
+    Enum.sort_by(matches, fn m ->
+      type_order = Map.get(@specificity_order, m.path_type, 3)
+      path_len = -String.length(m.path)
+      {type_order, path_len}
+    end)
   end
 
   defp update_route_checksum(%Application{} = app) do

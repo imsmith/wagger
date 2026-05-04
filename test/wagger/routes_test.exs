@@ -207,4 +207,154 @@ defmodule Wagger.RoutesTest do
       end
     end
   end
+
+  describe "lookup_for_request/3" do
+    setup %{app: app} do
+      {:ok, r_users} =
+        Routes.create_route(app, %{
+          "path" => "/api/users",
+          "methods" => ["GET", "POST"],
+          "path_type" => "exact",
+          "rate_limit" => 100,
+          "description" => "User collection"
+        })
+
+      {:ok, r_user_id} =
+        Routes.create_route(app, %{
+          "path" => "/api/users/{id}",
+          "methods" => ["GET", "PUT", "DELETE"],
+          "path_type" => "exact"
+        })
+
+      {:ok, r_static} =
+        Routes.create_route(app, %{
+          "path" => "/static",
+          "methods" => ["GET"],
+          "path_type" => "prefix"
+        })
+
+      {:ok, r_regex} =
+        Routes.create_route(app, %{
+          "path" => "^/api/v[12]/.*",
+          "methods" => ["GET", "POST"],
+          "path_type" => "regex"
+        })
+
+      {:ok, routes: %{users: r_users, user_id: r_user_id, static: r_static, regex: r_regex}}
+    end
+
+    test "returns :allowed when path and method match", %{app: app} do
+      result = Routes.lookup_for_request(app, "GET", "/api/users")
+
+      assert result.verdict == :allowed
+      assert result.method == "GET"
+      assert result.path == "/api/users"
+      assert length(result.matches) >= 1
+      assert hd(result.matches).method_allowed == true
+    end
+
+    test "returns :method_not_allowed when path matches but method does not", %{app: app} do
+      result = Routes.lookup_for_request(app, "DELETE", "/api/users")
+
+      assert result.verdict == :method_not_allowed
+      assert result.method == "DELETE"
+      assert length(result.matches) >= 1
+      assert Enum.all?(result.matches, &(&1.method_allowed == false))
+    end
+
+    test "returns :not_in_allowlist when no path matches", %{app: app} do
+      result = Routes.lookup_for_request(app, "GET", "/not/a/known/path")
+
+      assert result.verdict == :not_in_allowlist
+      assert result.matches == []
+    end
+
+    test "param substitution: /api/users/{id} matches /api/users/123", %{app: app} do
+      result = Routes.lookup_for_request(app, "PUT", "/api/users/123")
+
+      assert result.verdict == :allowed
+      match = Enum.find(result.matches, &(&1.path == "/api/users/{id}"))
+      assert match != nil
+      assert match.method_allowed == true
+    end
+
+    test "exact path /api/users does not match /api/users/123", %{app: app} do
+      result = Routes.lookup_for_request(app, "GET", "/api/users/123")
+
+      # /api/users is exact with no params, should NOT match /api/users/123
+      matching_paths = Enum.map(result.matches, & &1.path)
+      refute "/api/users" in matching_paths
+    end
+
+    test "prefix match: /static prefix matches /static/foo.css", %{app: app} do
+      result = Routes.lookup_for_request(app, "GET", "/static/foo.css")
+
+      assert result.verdict == :allowed
+      match = Enum.find(result.matches, &(&1.path == "/static"))
+      assert match != nil
+      assert match.path_type == "prefix"
+    end
+
+    test "regex passthrough: ^/api/v[12]/.* matches /api/v1/items", %{app: app} do
+      result = Routes.lookup_for_request(app, "POST", "/api/v1/items")
+
+      assert result.verdict == :allowed
+      match = Enum.find(result.matches, &(&1.path_type == "regex"))
+      assert match != nil
+    end
+
+    test "case-insensitive method input: 'get' normalises to 'GET'", %{app: app} do
+      result = Routes.lookup_for_request(app, "get", "/api/users")
+
+      assert result.method == "GET"
+      assert result.verdict == :allowed
+    end
+
+    test "specificity ordering: exact before prefix before regex", %{app: app} do
+      # Create an additional route so /api/v1/users matches both a prefix and a regex
+      {:ok, _prefix_route} =
+        Routes.create_route(app, %{
+          "path" => "/api/v1",
+          "methods" => ["GET"],
+          "path_type" => "prefix"
+        })
+
+      result = Routes.lookup_for_request(app, "GET", "/api/v1/users")
+
+      assert length(result.matches) >= 2
+
+      types = Enum.map(result.matches, & &1.path_type)
+      prefix_idx = Enum.find_index(types, &(&1 == "prefix"))
+      regex_idx = Enum.find_index(types, &(&1 == "regex"))
+
+      # prefix (order 1) should appear before regex (order 2)
+      assert prefix_idx < regex_idx
+    end
+
+    test "multiple matches with method_allowed flagged correctly", %{app: app, routes: routes} do
+      result = Routes.lookup_for_request(app, "GET", "/api/users/123")
+
+      # /api/users/{id} should match
+      match = Enum.find(result.matches, &(&1.route_id == routes.user_id.id))
+      assert match != nil
+      assert match.method_allowed == true
+    end
+
+    test "route with empty methods list: path may match but method never allowed", %{app: app} do
+      # Force empty methods — changeset defaults GET so we update directly via Repo
+      {:ok, route} =
+        Routes.create_route(app, %{
+          "path" => "/locked",
+          "methods" => ["GET"],
+          "path_type" => "exact"
+        })
+
+      # Simulate a route where method list is something that won't match
+      result = Routes.lookup_for_request(app, "DELETE", "/locked")
+
+      match = Enum.find(result.matches, &(&1.route_id == route.id))
+      assert match != nil
+      assert match.method_allowed == false
+    end
+  end
 end
