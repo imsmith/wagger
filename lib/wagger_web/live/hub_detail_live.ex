@@ -11,6 +11,7 @@ defmodule WaggerWeb.HubDetailLive do
   alias Wagger.Applications
   alias Wagger.Drift
   alias Wagger.Generator
+  alias Wagger.Generator.Multi
   alias Wagger.Routes
   alias Wagger.Snapshots
 
@@ -23,33 +24,48 @@ defmodule WaggerWeb.HubDetailLive do
       leaf_routes: 1,
       format_path: 1,
       treemap_cell_class: 1,
-      method_dot_color: 1
+      method_dot_color: 1,
+      config_field_type: 1,
+      config_field_key_label: 1
     ]
 
-  @providers ~w(aws azure caddy cloudflare coraza gcp gcp_urlmap nginx zap)
+  @providers ~w(aws azure caddy cloudflare coraza gcp nginx zap)
 
   @provider_modules %{
     "nginx" => Wagger.Generator.Nginx,
     "aws" => Wagger.Generator.Aws,
     "cloudflare" => Wagger.Generator.Cloudflare,
     "azure" => Wagger.Generator.Azure,
-    "gcp" => Wagger.Generator.Gcp,
-    "gcp_urlmap" => Wagger.Generator.GcpUrlMap,
+    "gcp" => [
+      {"Cloud Armor", Wagger.Generator.Gcp, "gcp-armor.json"},
+      {"URL Map", Wagger.Generator.GcpUrlMap, "gcp-urlmap.json"}
+    ],
     "caddy" => Wagger.Generator.Caddy,
     "coraza" => Wagger.Generator.Coraza,
     "zap" => Wagger.Generator.Zap
   }
 
   @provider_config_fields %{
-    "nginx" => [{"prefix", "Name prefix"}, {"upstream", "Upstream URL"}],
-    "caddy" => [{"prefix", "Name prefix"}, {"upstream", "Upstream URL"}],
-    "aws" => [{"prefix", "Name prefix"}, {"scope", "REGIONAL or CLOUDFRONT"}],
-    "cloudflare" => [{"prefix", "Name prefix"}],
-    "azure" => [{"prefix", "Name prefix"}, {"mode", "Prevention or Detection"}],
-    "gcp" => [{"prefix", "Name prefix"}],
-    "gcp_urlmap" => [{"prefix", "Name prefix"}],
-    "coraza" => [{"prefix", "Name prefix"}, {"start_rule_id", "Starting rule ID (default 100001)"}],
-    "zap" => [{"prefix", "Name prefix"}, {"target_url", "Target URL (or {{TARGET_URL}})"}]
+    "nginx" => [{"prefix", "Name prefix", :text}, {"upstream", "Upstream URL", :text}],
+    "caddy" => [{"prefix", "Name prefix", :text}, {"upstream", "Upstream URL", :text}],
+    "aws" => [{"prefix", "Name prefix", :text}, {"scope", "REGIONAL or CLOUDFRONT", :text}],
+    "cloudflare" => [{"prefix", "Name prefix", :text}],
+    "azure" => [{"prefix", "Name prefix", :text}, {"mode", "Prevention or Detection", :text}],
+    "gcp" => [
+      {"prefix", "Name prefix", :text},
+      {"allow_ip_ranges", "Allowed source IP ranges (one CIDR per line)", :textarea},
+      {"allow_regions", "Allowed source regions (one ISO code per line, e.g. US, GB)", :textarea},
+      {"known_traffic_backend", "Known-traffic backend ref (URL Map)", :text},
+      {"deny_backend", "Deny backend ref (URL Map)", :text}
+    ],
+    "coraza" => [
+      {"prefix", "Name prefix", :text},
+      {"start_rule_id", "Starting rule ID (default 100001)", :text}
+    ],
+    "zap" => [
+      {"prefix", "Name prefix", :text},
+      {"target_url", "Target URL (or {{TARGET_URL}})", :text}
+    ]
   }
 
   @impl true
@@ -126,13 +142,20 @@ defmodule WaggerWeb.HubDetailLive do
   def handle_event("generate", params, socket) do
     app = socket.assigns.app
     provider = socket.assigns.selected_provider
-    module = Map.fetch!(@provider_modules, provider)
+    provider_spec = Map.fetch!(@provider_modules, provider)
     routes = socket.assigns.routes
     route_data = Drift.normalize_for_snapshot(routes)
 
-    config = Map.drop(params, ["_target"])
+    raw_config = Map.drop(params, ["_target"])
+    config = parse_provider_config(provider, raw_config)
 
-    case Generator.generate(module, route_data, config) do
+    result =
+      case provider_spec do
+        specs when is_list(specs) -> Multi.generate(specs, route_data, config)
+        module -> Generator.generate(module, route_data, config)
+      end
+
+    case result do
       {:ok, output} ->
         checksum = Drift.compute_checksum(route_data)
 
@@ -160,4 +183,33 @@ defmodule WaggerWeb.HubDetailLive do
 
   @doc "Returns provider-specific configuration field definitions for the generate form."
   def config_fields_for(provider), do: Map.get(@provider_config_fields, provider, [])
+
+  @doc "Splits a combined multi-artifact snapshot output into labeled sections."
+  def split_snapshot_output(nil), do: [{nil, nil, ""}]
+  def split_snapshot_output(output), do: Multi.split_artifacts(output)
+
+  # Parse textarea and optional text config fields for GCP before dispatch.
+  defp parse_provider_config("gcp", config) do
+    config
+    |> Map.update("allow_ip_ranges", nil, &parse_textarea_field/1)
+    |> Map.update("allow_regions", nil, &parse_textarea_field/1)
+    |> Map.update("known_traffic_backend", nil, &nil_if_blank/1)
+    |> Map.update("deny_backend", nil, &nil_if_blank/1)
+    |> Map.reject(fn {_k, v} -> is_nil(v) end)
+  end
+  defp parse_provider_config(_provider, config), do: config
+
+  defp parse_textarea_field(nil), do: nil
+  defp parse_textarea_field(""), do: nil
+  defp parse_textarea_field(value) when is_list(value), do: value
+  defp parse_textarea_field(value) when is_binary(value) do
+    case value |> String.split("\n") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) do
+      [] -> nil
+      list -> list
+    end
+  end
+
+  defp nil_if_blank(nil), do: nil
+  defp nil_if_blank(""), do: nil
+  defp nil_if_blank(v), do: v
 end

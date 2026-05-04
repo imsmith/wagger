@@ -126,6 +126,46 @@ defmodule WaggerWeb.GenerateControllerTest do
     end
   end
 
+  describe "create — gcp (coupled)" do
+    test "returns combined output with both artifact separator headers", %{conn: conn, app: app} do
+      conn = post(conn, ~p"/api/applications/#{app.id}/generate/gcp", %{"prefix" => "test"})
+
+      assert %{
+               "output" => output,
+               "provider" => "gcp",
+               "snapshot_id" => snapshot_id
+             } = json_response(conn, 200)
+
+      assert output =~ "gcp-armor.json"
+      assert output =~ "gcp-urlmap.json"
+      assert output =~ "Cloud Armor"
+      assert output =~ "URL Map"
+      assert is_integer(snapshot_id)
+    end
+
+    test "gcp_urlmap is not a valid standalone provider", %{conn: conn, app: app} do
+      conn = post(conn, ~p"/api/applications/#{app.id}/generate/gcp_urlmap", %{})
+
+      assert %{"error" => error} = json_response(conn, 400)
+      assert error =~ "Unknown provider: gcp_urlmap"
+    end
+
+    test "combined output splits into exactly two artifacts via Multi.split_artifacts", %{
+      conn: conn,
+      app: app
+    } do
+      conn = post(conn, ~p"/api/applications/#{app.id}/generate/gcp", %{"prefix" => "split-test"})
+      %{"output" => output} = json_response(conn, 200)
+
+      artifacts = Wagger.Generator.Multi.split_artifacts(output)
+      assert length(artifacts) == 2
+
+      labels = Enum.map(artifacts, fn {label, _fn, _content} -> label end)
+      assert "Cloud Armor" in labels
+      assert "URL Map" in labels
+    end
+  end
+
   describe "create — unknown provider" do
     test "returns 400 with error message", %{conn: conn, app: app} do
       conn = post(conn, ~p"/api/applications/#{app.id}/generate/bogus", %{})

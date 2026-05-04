@@ -193,15 +193,26 @@
     <%= if @selected_provider do %>
       <form phx-submit="generate" class="space-y-3">
         <div class="flex flex-wrap gap-3 items-end">
-          <%= for {field, label} <- config_fields_for(@selected_provider) do %>
+          <%= for field_spec <- config_fields_for(@selected_provider) do %>
+            <% {field, label} = config_field_key_label(field_spec) %>
+            <% input_type = config_field_type(field_spec) %>
             <div class="flex flex-col gap-1">
               <label class="text-xs text-[color:var(--tn-text-muted)] uppercase tracking-wide"><%= label %></label>
-              <input
-                type="text"
-                name={field}
-                value={if field == "prefix", do: @app.name, else: ""}
-                class="input input-bordered input-sm bg-base-200 text-base-content font-mono w-48"
-              />
+              <%= if input_type == :textarea do %>
+                <textarea
+                  name={field}
+                  rows="4"
+                  class="textarea textarea-bordered textarea-sm bg-base-200 text-base-content font-mono w-56 text-xs"
+                  placeholder="one per line"
+                ></textarea>
+              <% else %>
+                <input
+                  type="text"
+                  name={field}
+                  value={if field == "prefix", do: @app.name, else: ""}
+                  class="input input-bordered input-sm bg-base-200 text-base-content font-mono w-48"
+                />
+              <% end %>
             </div>
           <% end %>
           <button type="submit" class="btn btn-primary btn-sm">
@@ -211,15 +222,34 @@
       </form>
 
       <%= if @generated_output do %>
-        <div class="relative mt-4">
-          <button
-            phx-click={Phoenix.LiveView.JS.dispatch("wagger:copy", to: "#hub-output")}
-            class="absolute top-2 right-2 text-xs text-[color:var(--tn-text-muted)] hover:text-base-content bg-base-200 border border-neutral px-2 py-0.5 rounded cursor-pointer z-10"
-          >
-            Copy
-          </button>
-          <pre id="hub-output" tabindex="0" class="wagger-copyable p-3 bg-base-100 border border-neutral rounded text-xs max-h-96 overflow-y-auto whitespace-pre-wrap break-all focus:outline focus:outline-2 focus:outline-primary"><code><%= @generated_output %></code></pre>
-        </div>
+        <%= if @selected_provider == "gcp" do %>
+          <p class="mt-2 text-xs text-[color:var(--tn-text-muted)] leading-relaxed">
+            Deploys as: URL Map routes known (method, path) traffic to a known-traffic backend
+            (with Cloud Armor policy attached). Unknown traffic routes to a deny backend returning 403.
+            Substitute <code class="bg-base-100 px-1 rounded">__KNOWN_TRAFFIC_BACKEND__</code> and
+            <code class="bg-base-100 px-1 rounded">__DENY_BACKEND__</code> placeholders or set them above.
+          </p>
+        <% end %>
+        <% artifacts = split_snapshot_output(@generated_output) %>
+        <%= for {label, filename, content} <- artifacts do %>
+          <% artifact_id = if label, do: "hub-output-#{filename |> String.replace(~r/[^a-z0-9]/, "-")}", else: "hub-output" %>
+          <div class="relative mt-4">
+            <%= if label do %>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-semibold text-[color:var(--tn-text-muted)] font-mono"><%= filename %></span>
+                <span class="text-[10px] text-[color:var(--tn-text-muted)]"><%= label %></span>
+              </div>
+            <% end %>
+            <button
+              phx-click={Phoenix.LiveView.JS.dispatch("wagger:copy", to: "##{artifact_id}")}
+              class="absolute top-2 right-2 text-xs text-[color:var(--tn-text-muted)] hover:text-base-content bg-base-200 border border-neutral px-2 py-0.5 rounded cursor-pointer z-10"
+              style={if label, do: "top: 1.75rem;"}
+            >
+              Copy
+            </button>
+            <pre id={artifact_id} tabindex="0" class="wagger-copyable p-3 bg-base-100 border border-neutral rounded text-xs max-h-96 overflow-y-auto whitespace-pre-wrap break-all focus:outline focus:outline-2 focus:outline-primary"><code><%= content %></code></pre>
+          </div>
+        <% end %>
       <% end %>
     <% end %>
   </div>

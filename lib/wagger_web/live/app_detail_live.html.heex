@@ -376,15 +376,37 @@
                   Show generated config (<%= byte_size(snap.output) %> bytes)
                 </button>
                 <%= if MapSet.member?(@show_output, provider) do %>
-                  <div class="relative mt-2">
-                    <button
-                      phx-click={JS.dispatch("wagger:copy", to: "#config-output-#{provider}")}
-                      class="absolute top-2 right-2 text-xs text-[color:var(--tn-text-muted)] hover:text-base-content bg-base-200 border border-neutral px-2 py-0.5 rounded cursor-pointer z-10"
-                    >
-                      Copy
-                    </button>
-                    <pre id={"config-output-#{provider}"} tabindex="0" class="wagger-copyable p-3 bg-base-100 border border-neutral rounded text-xs max-h-96 overflow-y-auto whitespace-pre-wrap break-all focus:outline focus:outline-2 focus:outline-primary"><code><%= snap.output %></code></pre>
-                  </div>
+                  <%= if provider == "gcp" do %>
+                    <p class="mt-2 text-xs text-[color:var(--tn-text-muted)] leading-relaxed">
+                      Deploys as: URL Map at the HTTPS Load Balancer routes known (method, path)
+                      traffic to a known-traffic backend service (with the Cloud Armor policy
+                      attached). Unknown traffic routes to a deny backend you provide (a small
+                      Cloud Run / serverless NEG returning 403). Substitute
+                      <code class="bg-base-100 px-1 rounded">__KNOWN_TRAFFIC_BACKEND__</code> and
+                      <code class="bg-base-100 px-1 rounded">__DENY_BACKEND__</code> placeholders
+                      or set them via the config fields above.
+                    </p>
+                  <% end %>
+                  <% artifacts = split_snapshot_output(snap.output) %>
+                  <%= for {label, filename, content} <- artifacts do %>
+                    <% artifact_id = if label, do: "config-output-#{provider}-#{filename |> String.replace(~r/[^a-z0-9]/, "-")}", else: "config-output-#{provider}" %>
+                    <div class="relative mt-2">
+                      <%= if label do %>
+                        <div class="flex items-center justify-between mb-1">
+                          <span class="text-xs font-semibold text-[color:var(--tn-text-muted)] font-mono"><%= filename %></span>
+                          <span class="text-[10px] text-[color:var(--tn-text-muted)]"><%= label %></span>
+                        </div>
+                      <% end %>
+                      <button
+                        phx-click={JS.dispatch("wagger:copy", to: "##{artifact_id}")}
+                        class="absolute top-2 right-2 text-xs text-[color:var(--tn-text-muted)] hover:text-base-content bg-base-200 border border-neutral px-2 py-0.5 rounded cursor-pointer z-10"
+                        style={if label, do: "top: 1.75rem;"}
+                      >
+                        Copy
+                      </button>
+                      <pre id={artifact_id} tabindex="0" class="wagger-copyable p-3 bg-base-100 border border-neutral rounded text-xs max-h-96 overflow-y-auto whitespace-pre-wrap break-all focus:outline focus:outline-2 focus:outline-primary"><code><%= content %></code></pre>
+                    </div>
+                  <% end %>
                 <% end %>
               </div>
             <% end %>

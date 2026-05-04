@@ -15,6 +15,7 @@ defmodule WaggerWeb.GenerateController do
   alias Wagger.Applications
   alias Wagger.Drift
   alias Wagger.Generator
+  alias Wagger.Generator.Multi
   alias Wagger.Routes
   alias Wagger.Snapshots
 
@@ -25,8 +26,10 @@ defmodule WaggerWeb.GenerateController do
     "aws" => Wagger.Generator.Aws,
     "cloudflare" => Wagger.Generator.Cloudflare,
     "azure" => Wagger.Generator.Azure,
-    "gcp" => Wagger.Generator.Gcp,
-    "gcp_urlmap" => Wagger.Generator.GcpUrlMap,
+    "gcp" => [
+      {"Cloud Armor", Wagger.Generator.Gcp, "gcp-armor.json"},
+      {"URL Map", Wagger.Generator.GcpUrlMap, "gcp-urlmap.json"}
+    ],
     "caddy" => Wagger.Generator.Caddy,
     "coraza" => Wagger.Generator.Coraza,
     "zap" => Wagger.Generator.Zap
@@ -47,12 +50,18 @@ defmodule WaggerWeb.GenerateController do
         |> put_status(:bad_request)
         |> json(%{error: err.message, code: err.code, field: err.field})
 
-      {:ok, module} ->
+      {:ok, provider_spec} ->
         app = Applications.get_application!(app_id)
         routes = Routes.list_routes(app)
         route_data = Drift.normalize_for_snapshot(routes)
 
-        case Generator.generate(module, route_data, config) do
+        result =
+          case provider_spec do
+            specs when is_list(specs) -> Multi.generate(specs, route_data, config)
+            module -> Generator.generate(module, route_data, config)
+          end
+
+        case result do
           {:ok, output} ->
             checksum = Drift.compute_checksum(route_data)
 

@@ -6,7 +6,9 @@ defmodule WaggerWeb.AppDetailLiveTest do
   import Phoenix.LiveViewTest
 
   alias Wagger.Applications
+  alias Wagger.Generator.Multi
   alias Wagger.Routes
+  alias Wagger.Snapshots
 
   setup do
     {:ok, app} =
@@ -117,6 +119,93 @@ defmodule WaggerWeb.AppDetailLiveTest do
       # Should be back at top level
       assert html =~ "api"
       assert html =~ "health"
+    end
+  end
+
+  describe "GCP coupled provider" do
+    test "provider list does not include gcp_urlmap", %{conn: conn, app: app} do
+      {:ok, _lv, html} = live(conn, ~p"/applications/#{app.id}")
+      refute html =~ "gcp_urlmap"
+      refute html =~ "Gcp_urlmap"
+    end
+
+    test "quick_generate for gcp produces snapshot with both artifact separator headers",
+         %{conn: conn, app: app} do
+      {:ok, lv, _html} = live(conn, ~p"/applications/#{app.id}")
+
+      # Trigger quick_generate for gcp
+      lv
+      |> element(~s(button[phx-value-provider="gcp"]))
+      |> render_click()
+
+      # Retrieve the stored snapshot
+      snap = Snapshots.latest_snapshot(app, "gcp")
+      assert snap != nil
+
+      output = Snapshots.decrypt_output(snap)
+      assert output =~ "gcp-armor.json"
+      assert output =~ "gcp-urlmap.json"
+      assert output =~ "Cloud Armor"
+      assert output =~ "URL Map"
+    end
+
+    test "combined gcp output splits into exactly two artifacts", %{conn: conn, app: app} do
+      {:ok, lv, _html} = live(conn, ~p"/applications/#{app.id}")
+
+      lv
+      |> element(~s(button[phx-value-provider="gcp"]))
+      |> render_click()
+
+      snap = Snapshots.latest_snapshot(app, "gcp")
+      output = Snapshots.decrypt_output(snap)
+      artifacts = Multi.split_artifacts(output)
+
+      assert length(artifacts) == 2
+      labels = Enum.map(artifacts, fn {label, _filename, _content} -> label end)
+      assert "Cloud Armor" in labels
+      assert "URL Map" in labels
+    end
+
+    test "gcp config fields include allow_ip_ranges and allow_regions as textarea type",
+         %{conn: _conn, app: _app} do
+      fields = WaggerWeb.AppDetailLive.config_fields_for("gcp")
+      types = Map.new(fields, fn {key, _label, type} -> {key, type} end)
+
+      assert types["allow_ip_ranges"] == :textarea
+      assert types["allow_regions"] == :textarea
+      assert types["prefix"] == :text
+      assert types["known_traffic_backend"] == :text
+      assert types["deny_backend"] == :text
+    end
+  end
+
+  describe "Multi.split_artifacts/1" do
+    test "returns single element with nil label for non-multi-artifact input" do
+      output = ~s({"foo": "bar"})
+      assert [{nil, nil, ^output}] = Multi.split_artifacts(output)
+    end
+
+    test "correctly round-trips two artifacts" do
+      routes = [%{path: "/health", methods: ["GET"], path_type: "exact"}]
+      modules = [
+        {"Cloud Armor", Wagger.Generator.Gcp, "gcp-armor.json"},
+        {"URL Map", Wagger.Generator.GcpUrlMap, "gcp-urlmap.json"}
+      ]
+
+      {:ok, combined} = Multi.generate(modules, routes, %{prefix: "test"})
+      artifacts = Multi.split_artifacts(combined)
+
+      assert length(artifacts) == 2
+      {label1, fn1, content1} = Enum.at(artifacts, 0)
+      {label2, fn2, content2} = Enum.at(artifacts, 1)
+
+      assert label1 == "Cloud Armor"
+      assert fn1 == "gcp-armor.json"
+      assert content1 =~ "WAF policy"
+
+      assert label2 == "URL Map"
+      assert fn2 == "gcp-urlmap.json"
+      assert content2 =~ "defaultService"
     end
   end
 end
