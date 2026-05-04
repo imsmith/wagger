@@ -87,6 +87,18 @@ defmodule Wagger.RoutesTest do
       assert {:error, changeset} = Routes.create_route(app, attrs)
       assert %{path_type: ["is invalid"]} = errors_on(changeset)
     end
+
+    test "rejects invalid regex when path_type is regex", %{app: app} do
+      attrs = %{"path" => "^/api/(unclosed", "path_type" => "regex", "methods" => ["GET"]}
+      assert {:error, changeset} = Routes.create_route(app, attrs)
+      assert %{path: [msg]} = errors_on(changeset)
+      assert msg =~ "invalid regex"
+    end
+
+    test "accepts valid regex when path_type is regex", %{app: app} do
+      attrs = %{"path" => "^/api/v[12]/.*$", "path_type" => "regex", "methods" => ["GET"]}
+      assert {:ok, _route} = Routes.create_route(app, attrs)
+    end
   end
 
   describe "list_routes/2" do
@@ -340,8 +352,11 @@ defmodule Wagger.RoutesTest do
       assert match.method_allowed == true
     end
 
-    test "route with empty methods list: path may match but method never allowed", %{app: app} do
-      # Force empty methods — changeset defaults GET so we update directly via Repo
+    test "route with truly empty methods list: path matches but method never allowed", %{app: app} do
+      # Bypass the changeset default by inserting via Repo with raw SQL-shaped attrs.
+      # The changeset rewrites methods=[] to ["GET"]; we want to verify the lookup
+      # gracefully handles the stored-empty case (e.g., direct DB writes from data
+      # imports that skip changeset validation).
       {:ok, route} =
         Routes.create_route(app, %{
           "path" => "/locked",
@@ -349,12 +364,19 @@ defmodule Wagger.RoutesTest do
           "path_type" => "exact"
         })
 
-      # Simulate a route where method list is something that won't match
-      result = Routes.lookup_for_request(app, "DELETE", "/locked")
+      {1, _} =
+        Wagger.Repo.update_all(
+          Ecto.Query.from(r in Wagger.Applications.Route, where: r.id == ^route.id),
+          set: [methods: []]
+        )
+
+      result = Routes.lookup_for_request(app, "GET", "/locked")
 
       match = Enum.find(result.matches, &(&1.route_id == route.id))
       assert match != nil
+      assert match.methods == []
       assert match.method_allowed == false
+      assert result.verdict == :method_not_allowed
     end
   end
 end
