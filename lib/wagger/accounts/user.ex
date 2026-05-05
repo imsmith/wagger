@@ -1,10 +1,11 @@
 defmodule Wagger.Accounts.User do
   @moduledoc """
-  Ecto schema for a User — a human operator with API key authentication.
+  Ecto schema for a User — a human operator.
 
-  Users authenticate via API keys. The key itself is never stored; only a
-  SHA-256 hex digest of the key is persisted. Usernames must be lowercase slugs
-  and are unique across the system.
+  Authentication paths: API key (existing), OAuth via linked
+  `oauth_identities` (browser), and local password (browser).
+  Usernames must be lowercase slugs and are unique. Email is
+  optional but unique when present.
   """
 
   use Ecto.Schema
@@ -15,11 +16,17 @@ defmodule Wagger.Accounts.User do
     autogenerate: {__MODULE__, :timestamp_now, []}
   ]
 
+  @valid_roles ~w(admin user)
+
   schema "users" do
     field :username, :string
     field :display_name, :string
+    field :email, :string
+    field :role, :string, default: "user"
     field :password_hash, :string
     field :api_key_hash, :string
+
+    belongs_to :invite_code, Wagger.Invites.InviteCode
 
     timestamps(type: :string)
   end
@@ -29,19 +36,25 @@ defmodule Wagger.Accounts.User do
 
   @doc """
   Changeset for creating or updating a User.
-
-  Casts username, display_name, password_hash, and api_key_hash. Requires username.
-  Validates username format as a lowercase slug and enforces uniqueness on both
-  username and api_key_hash.
   """
   def changeset(user, attrs) do
     user
-    |> cast(attrs, [:username, :display_name, :password_hash, :api_key_hash])
+    |> cast(attrs, [
+      :username,
+      :display_name,
+      :email,
+      :role,
+      :password_hash,
+      :api_key_hash,
+      :invite_code_id
+    ])
     |> validate_required([:username])
     |> validate_format(:username, ~r/^[a-z0-9][a-z0-9\-]*$/,
       message: "must be a lowercase slug (letters, digits, hyphens)"
     )
+    |> validate_inclusion(:role, @valid_roles)
     |> unique_constraint(:username)
+    |> unique_constraint(:email)
     |> unique_constraint(:api_key_hash)
   end
 end
