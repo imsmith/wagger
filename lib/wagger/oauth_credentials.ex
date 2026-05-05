@@ -12,6 +12,8 @@ defmodule Wagger.OauthCredentials do
   alias Wagger.Repo
   alias Wagger.OauthCredentials.Credential
 
+  require Logger
+
   @providers ~w(google github)
 
   @env_var %{
@@ -94,9 +96,20 @@ defmodule Wagger.OauthCredentials do
       :error ->
         case env_var_creds(provider) do
           {:ok, id, secret} ->
-            case do_upsert(provider, id, lock_or_keep(secret)) do
-              {:ok, _} -> publish(provider, id, secret)
-              _ -> :ok
+            case Wagger.Secrets.lock(secret) do
+              {:ok, locked} ->
+                case do_upsert(provider, id, locked) do
+                  {:ok, _} -> publish(provider, id, secret)
+                  _ -> :ok
+                end
+
+              {:error, reason} ->
+                Logger.warning(
+                  "OAuth env-var bootstrap for #{provider} failed to lock secret " <>
+                    "(#{inspect(reason)}); provider remains unconfigured"
+                )
+
+                :ok
             end
 
           :error ->
@@ -114,13 +127,6 @@ defmodule Wagger.OauthCredentials do
       {:ok, id, secret}
     else
       :error
-    end
-  end
-
-  defp lock_or_keep(plain) do
-    case Wagger.Secrets.lock(plain) do
-      {:ok, locked} -> locked
-      _ -> plain
     end
   end
 

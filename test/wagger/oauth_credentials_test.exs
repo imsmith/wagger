@@ -18,6 +18,10 @@ defmodule Wagger.OauthCredentialsTest do
     test "stores client_id cleartext, secret locked, retrievable plaintext" do
       assert {:ok, _} = OauthCredentials.upsert("google", "id-1", "secret-1")
       assert {:ok, %{client_id: "id-1", client_secret: "secret-1"}} = OauthCredentials.get("google")
+
+      row = Wagger.Repo.get_by!(Wagger.OauthCredentials.Credential, provider: "google")
+      refute row.client_secret_locked == "secret-1"
+      refute is_nil(row.client_secret_locked)
     end
 
     test "upsert overwrites existing credentials for a provider" do
