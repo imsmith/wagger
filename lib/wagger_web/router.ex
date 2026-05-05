@@ -34,6 +34,11 @@ defmodule WaggerWeb.Router do
     end
 
     get "/mcp/download/:token", McpDownloadController, :show
+
+    get "/login", SessionController, :new
+    delete "/logout", SessionController, :delete
+    get "/auth/:provider", AuthController, :request
+    get "/auth/:provider/callback", AuthController, :callback
   end
 
   scope "/api", WaggerWeb do
