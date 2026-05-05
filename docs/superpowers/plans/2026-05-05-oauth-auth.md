@@ -564,12 +564,14 @@ defmodule Wagger.Accounts.OauthIdentity do
     |> cast(attrs, [:provider, :provider_uid, :email, :raw_info, :user_id])
     |> validate_required([:provider, :provider_uid, :email, :user_id])
     |> validate_inclusion(:provider, @valid_providers)
-    |> unique_constraint([:provider, :provider_uid],
+    |> unique_constraint(:provider_uid,
       name: :oauth_identities_provider_provider_uid_index
     )
   end
 end
 ```
+
+(The unique_constraint binds to the compound index via `:name` but labels the changeset error on `:provider_uid` — Ecto attaches the error to the first field in the list form, but `:provider_uid` is what the user actually controls per attempt and what tests assert against.)
 
 - [ ] **Step 2: Compile**
 
@@ -970,7 +972,17 @@ defmodule Wagger.Accounts do
 end
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 4: Register the orphan-account error code**
+
+`Comn.Errors.Registry.error!/2` rejects unregistered codes. Add to `lib/wagger/errors.ex` after the existing `wagger.accounts/protected_user` registration:
+
+```elixir
+  register_error "wagger.accounts/orphan_account", :validation,
+    message: "Removing this would leave the account with no way to log in",
+    status: 409
+```
+
+- [ ] **Step 5: Run tests**
 
 ```bash
 mix test test/wagger/accounts_test.exs
@@ -978,10 +990,10 @@ mix test test/wagger/accounts_test.exs
 
 Expected: all pass, including the existing API-key tests and the new OAuth/password tests.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add lib/wagger/accounts.ex test/wagger/accounts_test.exs
+git add lib/wagger/accounts.ex lib/wagger/errors.ex test/wagger/accounts_test.exs
 git commit -m "feat(auth): Accounts — register_oauth_user, password set/auth/clear, no-orphan rule (Task 10)"
 ```
 
@@ -1108,6 +1120,10 @@ Append to `lib/wagger/accounts.ex` (inside the module, before the final `end`):
   auth method.
   """
   def unlink_identity(%User{} = user, identity_id) when is_integer(identity_id) do
+    # Reload so a stale caller (e.g., one that ran set_password but kept the
+    # original struct) doesn't trip the no-orphan check incorrectly.
+    user = Repo.get!(User, user.id)
+
     if has_other_auth_method?(user, exclude: {:oauth_identity, identity_id}) do
       case Repo.get_by(OauthIdentity, id: identity_id, user_id: user.id) do
         nil ->
@@ -1124,7 +1140,17 @@ Append to `lib/wagger/accounts.ex` (inside the module, before the final `end`):
   end
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 4: Register the identity-not-found error code**
+
+Add to `lib/wagger/errors.ex` after `wagger.accounts/orphan_account`:
+
+```elixir
+  register_error "wagger.accounts/identity_not_found", :validation,
+    message: "OAuth identity not found",
+    status: 404
+```
+
+- [ ] **Step 5: Run tests**
 
 ```bash
 mix test test/wagger/accounts_test.exs
@@ -1132,10 +1158,10 @@ mix test test/wagger/accounts_test.exs
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add lib/wagger/accounts.ex test/wagger/accounts_test.exs
+git add lib/wagger/accounts.ex lib/wagger/errors.ex test/wagger/accounts_test.exs
 git commit -m "feat(auth): Accounts.link_identity/find_user_by_identity/unlink_identity (Task 11)"
 ```
 
