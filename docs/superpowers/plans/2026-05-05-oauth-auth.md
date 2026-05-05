@@ -287,7 +287,7 @@ defmodule Wagger.Accounts.UserTest do
 
       assert cs.valid?
       assert get_change(cs, :email) == "alice@example.com"
-      assert get_change(cs, :role) == "user"
+      assert get_field(cs, :role) == "user"
     end
 
     test "rejects unknown role" do
