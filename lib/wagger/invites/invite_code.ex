@@ -20,6 +20,7 @@ defmodule Wagger.Invites.InviteCode do
     field :max_uses, :integer
     field :uses_count, :integer, default: 0
     field :revoked_at, :string
+    field :status, Ecto.Enum, values: [:active, :expired, :revoked, :exhausted], virtual: true
 
     belongs_to :created_by, Wagger.Accounts.User, foreign_key: :created_by_user_id
 
