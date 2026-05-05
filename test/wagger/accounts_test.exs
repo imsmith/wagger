@@ -59,4 +59,106 @@ defmodule Wagger.AccountsTest do
       assert Accounts.setup_required?() == false
     end
   end
+
+  describe "register_oauth_user/1" do
+    test "creates a user with derived username from email local-part" do
+      assert {:ok, user} =
+               Accounts.register_oauth_user(%{
+                 email: "alice@example.com",
+                 display_name: "Alice",
+                 role: "user"
+               })
+
+      assert user.email == "alice@example.com"
+      assert user.username == "alice"
+      assert user.role == "user"
+      assert is_nil(user.password_hash)
+      assert is_nil(user.api_key_hash)
+    end
+
+    test "appends a random suffix when username collides" do
+      {:ok, _} =
+        Accounts.register_oauth_user(%{email: "alice@a.com", display_name: "A"})
+
+      {:ok, second} =
+        Accounts.register_oauth_user(%{email: "alice@b.com", display_name: "A"})
+
+      assert String.starts_with?(second.username, "alice-")
+      refute second.username == "alice"
+    end
+
+    test "slugifies a non-slug local-part" do
+      {:ok, user} =
+        Accounts.register_oauth_user(%{email: "Alice.Smith+work@example.com"})
+
+      assert user.username == "alice-smith-work"
+    end
+  end
+
+  describe "get_user_by_email/1" do
+    test "returns the user when one matches" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "x@y.com"})
+      assert ^user = Accounts.get_user_by_email("x@y.com")
+    end
+
+    test "returns nil when no user matches" do
+      assert is_nil(Accounts.get_user_by_email("nobody@nowhere.com"))
+    end
+  end
+
+  describe "set_password/2 and authenticate_by_password/2" do
+    test "set_password hashes and stores; authenticate_by_password verifies" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "p@p.com"})
+
+      {:ok, updated} = Accounts.set_password(user, "correct-horse-battery")
+      refute is_nil(updated.password_hash)
+      refute updated.password_hash == "correct-horse-battery"
+
+      assert {:ok, found} = Accounts.authenticate_by_password("p@p.com", "correct-horse-battery")
+      assert found.id == user.id
+
+      assert {:error, :invalid_credentials} =
+               Accounts.authenticate_by_password("p@p.com", "wrong")
+    end
+
+    test "set_password rejects passwords shorter than 12 characters" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "s@s.com"})
+      assert {:error, cs} = Accounts.set_password(user, "short")
+      assert %{password_hash: [_msg]} = errors_on(cs)
+    end
+
+    test "authenticate_by_password returns :invalid_credentials for unknown email" do
+      assert {:error, :invalid_credentials} =
+               Accounts.authenticate_by_password("ghost@nowhere.com", "anything")
+    end
+  end
+
+  describe "clear_password/1" do
+    test "nils the password_hash when another auth method exists" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "c@c.com"})
+      {:ok, _} = Accounts.set_password(user, "long-enough-pass")
+
+      # Add a fake oauth identity so the user still has an auth method.
+      {:ok, _identity} =
+        %Wagger.Accounts.OauthIdentity{}
+        |> Wagger.Accounts.OauthIdentity.changeset(%{
+          provider: "github",
+          provider_uid: "12345",
+          email: "c@c.com",
+          user_id: user.id
+        })
+        |> Wagger.Repo.insert()
+
+      assert {:ok, cleared} = Accounts.clear_password(user)
+      assert is_nil(cleared.password_hash)
+    end
+
+    test "refuses when password is the only auth method" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "lone@p.com"})
+      {:ok, user_with_pw} = Accounts.set_password(user, "long-enough-pass")
+
+      assert {:error, %Comn.Errors.ErrorStruct{code: "wagger.accounts/orphan_account"}} =
+               Accounts.clear_password(user_with_pw)
+    end
+  end
 end
