@@ -158,13 +158,71 @@ defmodule Wagger.Generator.AwsTest do
 
       decoded_values = Enum.map(search_strings, &Base.decode64!/1)
 
-      # Method enforcement strings should round-trip to HTTP method literals.
-      assert "GET" in decoded_values
-      assert "POST" in decoded_values
+      # Method enforcement strings round-trip to lowercase HTTP method
+      # literals. The standard transforms include LOWERCASE, so the
+      # stored SearchString must already be lowercase to match a
+      # transformed request method.
+      assert "get" in decoded_values
+      assert "post" in decoded_values
+      refute "GET" in decoded_values
+      refute "POST" in decoded_values
 
       # Path allowlist strings should round-trip to declared paths.
       assert "/health" in decoded_values
       assert "/api/users" in decoded_values
+    end
+
+    test "method-enforcement rules are scoped by path (AndStatement with path predicate)" do
+      assert {:ok, output} = Generator.generate(Aws, @routes, @config)
+      decoded = Jason.decode!(output)
+
+      method_rules =
+        Enum.filter(decoded["Rules"], fn r -> r["Name"] =~ "methods-group-" end)
+
+      assert method_rules != [], "expected at least one method-enforcement rule"
+
+      Enum.each(method_rules, fn rule ->
+        assert %{"AndStatement" => %{"Statements" => [path_stmt, not_stmt]}} =
+                 rule["Statement"],
+               "method-enforcement rule #{rule["Name"]} must wrap its predicates in AndStatement"
+
+        # The path side is either a single path matcher or an OrStatement
+        # of path matchers; in both cases the leaf must be a UriPath
+        # ByteMatchStatement or a UriPath RegexMatchStatement.
+        path_leaves = collect_path_leaves(path_stmt)
+        assert path_leaves != [], "rule #{rule["Name"]} has no path predicate"
+
+        Enum.each(path_leaves, fn leaf ->
+          assert leaf == :byte_uripath or leaf == :regex_uripath,
+                 "expected path predicate to match UriPath, got #{inspect(leaf)}"
+        end)
+
+        # The other side is a NotStatement around the method matchers.
+        assert %{"NotStatement" => _} = not_stmt
+      end)
+    end
+
+    test "method-enforcement rule for the GET-only group is path-scoped to its routes" do
+      # /static/ (prefix) and /health (exact) are the only GET-only routes;
+      # they must show up under the methods-group-get rule's path predicate
+      # and nowhere else.
+      assert {:ok, output} = Generator.generate(Aws, @routes, @config)
+      decoded = Jason.decode!(output)
+
+      get_rule =
+        Enum.find(decoded["Rules"], fn r ->
+          r["Name"] == "myapp-methods-group-get"
+        end)
+
+      assert get_rule != nil, "expected myapp-methods-group-get rule"
+
+      [path_stmt, _not_stmt] = get_rule["Statement"]["AndStatement"]["Statements"]
+      paths = collect_search_paths(path_stmt) |> MapSet.new()
+
+      assert MapSet.member?(paths, "/health")
+      # /static/ is a prefix path → STARTS_WITH match → SearchString is the
+      # raw prefix string (base64-encoded as a Blob).
+      assert MapSet.member?(paths, "/static/")
     end
 
     test "output includes VisibilityConfig" do
@@ -194,4 +252,37 @@ defmodule Wagger.Generator.AwsTest do
   end
 
   defp collect_search_strings(_), do: []
+
+  # Walks a path-side statement and returns a list of leaf-kind tags so we
+  # can assert every leaf actually targets UriPath. Returns :byte_uripath
+  # for a UriPath ByteMatchStatement, :regex_uripath for a RegexMatchStatement.
+  defp collect_path_leaves(%{"OrStatement" => %{"Statements" => stmts}}),
+    do: Enum.flat_map(stmts, &collect_path_leaves/1)
+
+  defp collect_path_leaves(%{"ByteMatchStatement" => %{"FieldToMatch" => %{"UriPath" => _}}}),
+    do: [:byte_uripath]
+
+  defp collect_path_leaves(%{"RegexMatchStatement" => %{"FieldToMatch" => %{"UriPath" => _}}}),
+    do: [:regex_uripath]
+
+  defp collect_path_leaves(_), do: []
+
+  # Walks a path-side statement and returns the decoded literal SearchString
+  # values for ByteMatchStatement leaves (paths only — not regexes).
+  defp collect_search_paths(%{"OrStatement" => %{"Statements" => stmts}}),
+    do: Enum.flat_map(stmts, &collect_search_paths/1)
+
+  defp collect_search_paths(%{
+         "ByteMatchStatement" => %{
+           "FieldToMatch" => %{"UriPath" => _},
+           "SearchString" => s
+         }
+       }) do
+    case Base.decode64(s) do
+      {:ok, decoded} -> [decoded]
+      _ -> []
+    end
+  end
+
+  defp collect_search_paths(_), do: []
 end

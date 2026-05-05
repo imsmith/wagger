@@ -99,9 +99,31 @@ module wagger-aws-waf {
           description "HTTP methods allowed for routes in this group.";
         }
 
-        leaf-list paths {
-          type string;
-          description "Paths belonging to this method group.";
+        list paths {
+          key "path";
+          description
+            "Paths belonging to this method group, as match patterns. The
+             method-enforcement rule serializes each entry as a UriPath
+             ByteMatchStatement (or RegexMatchStatement for parameterized
+             paths) so the rule fires only on requests targeting these
+             paths — without that scope the NotStatement on method would
+             apply globally and block every non-matching method anywhere.";
+
+          leaf path {
+            type string;
+            mandatory true;
+            description "URL path, prefix, or regex for this method group.";
+          }
+
+          leaf match-type {
+            type enumeration {
+              enum "EXACTLY";
+              enum "STARTS_WITH";
+              enum "REGEX";
+            }
+            mandatory true;
+            description "AWS WAF match type for this path pattern.";
+          }
         }
       }
     }

@@ -118,10 +118,14 @@ defmodule Wagger.Generator.Aws do
   end
 
   defp build_method_rules(normalized, prefix, starting_priority: base) do
+    # Use to_path_pattern/1 as the mapper so each group carries paths in the
+    # same %{"path" => ..., "match-type" => ...} shape as the path-allowlist
+    # rule. The serializer then reuses pattern_to_statement/1 to scope each
+    # method-enforcement rule to its group's paths via an AndStatement.
     normalized
-    |> PathHelper.partition_by_method_set(& &1.path)
+    |> PathHelper.partition_by_method_set(&to_path_pattern/1)
     |> Enum.with_index()
-    |> Enum.map(fn {{methods, paths}, idx} ->
+    |> Enum.map(fn {{methods, path_patterns}, idx} ->
       group_name = "group-#{Enum.join(Enum.map(methods, &String.downcase/1), "-")}"
 
       %{
@@ -133,7 +137,7 @@ defmodule Wagger.Generator.Aws do
           %{
             "group-name" => group_name,
             "methods" => methods,
-            "paths" => paths
+            "paths" => path_patterns
           }
         ]
       }
@@ -168,7 +172,7 @@ defmodule Wagger.Generator.Aws do
 
     matchers = Enum.map(patterns, &pattern_to_statement/1)
 
-    or_statement = %{"OrStatement" => %{"Statements" => matchers}}
+    or_statement = wrap_or(matchers)
     not_statement = %{"NotStatement" => %{"Statement" => or_statement}}
 
     %{
@@ -183,14 +187,17 @@ defmodule Wagger.Generator.Aws do
   defp serialize_rule(%{"rule-type" => "method-enforcement"} = rule) do
     groups = rule["method-groups"]
 
-    statements =
+    method_statements =
       Enum.flat_map(groups, fn group ->
-        methods = group["methods"]
-
-        Enum.map(methods, fn method ->
+        Enum.map(group["methods"], fn method ->
           %{
             "ByteMatchStatement" => %{
-              "SearchString" => Base.encode64(method),
+              # Lowercase before encoding so the stored SearchString matches
+              # request methods after the LOWERCASE TextTransformation. AWS
+              # WAF compares the transformed request bytes to the stored
+              # SearchString verbatim, so an uppercase SearchString never
+              # matches a transformed request.
+              "SearchString" => Base.encode64(String.downcase(method)),
               "FieldToMatch" => %{"Method" => %{}},
               "TextTransformations" => @standard_transforms,
               "PositionalConstraint" => "EXACTLY"
@@ -199,18 +206,30 @@ defmodule Wagger.Generator.Aws do
         end)
       end)
 
-    allow_statement =
-      case statements do
-        [single] -> single
-        many -> %{"OrStatement" => %{"Statements" => many}}
-      end
+    method_allow_statement = wrap_or(method_statements)
 
-    not_statement = %{"NotStatement" => %{"Statement" => allow_statement}}
+    path_statements =
+      Enum.flat_map(groups, fn group ->
+        Enum.map(group["paths"] || [], &pattern_to_statement/1)
+      end)
+
+    path_match_statement = wrap_or(path_statements)
+
+    not_method_statement = %{"NotStatement" => %{"Statement" => method_allow_statement}}
+
+    # The rule fires only for requests on this group's paths whose method is
+    # not in the allowed set. Without the path predicate the rule would
+    # block every non-matching method across the entire WebACL.
+    statement = %{
+      "AndStatement" => %{
+        "Statements" => [path_match_statement, not_method_statement]
+      }
+    }
 
     %{
       "Name" => rule["name"],
       "Priority" => rule["priority"],
-      "Statement" => not_statement,
+      "Statement" => statement,
       "Action" => %{"Block" => %{}},
       "VisibilityConfig" => visibility_config(rule["name"])
     }
@@ -230,6 +249,9 @@ defmodule Wagger.Generator.Aws do
       "VisibilityConfig" => visibility_config(rule["name"])
     }
   end
+
+  defp wrap_or([single]), do: single
+  defp wrap_or(many), do: %{"OrStatement" => %{"Statements" => many}}
 
   defp pattern_to_statement(%{"match-type" => "REGEX", "path" => path}) do
     %{
