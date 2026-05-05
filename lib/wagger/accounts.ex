@@ -201,6 +201,53 @@ defmodule Wagger.Accounts do
     has_password? or has_api_key? or identity_count > 0
   end
 
+  @doc """
+  Links a new OAuth identity to a user. `attrs` must contain
+  `provider_uid`, `email`, and may contain `raw_info`.
+  """
+  def link_identity(%User{} = user, provider, attrs) when is_binary(provider) and is_map(attrs) do
+    full =
+      attrs
+      |> Map.new(fn {k, v} -> {to_string(k), v} end)
+      |> Map.put("provider", provider)
+      |> Map.put("user_id", user.id)
+
+    %OauthIdentity{} |> OauthIdentity.changeset(full) |> Repo.insert()
+  end
+
+  @doc """
+  Returns the User linked to the given (provider, provider_uid), or nil.
+  """
+  def find_user_by_identity(provider, provider_uid)
+      when is_binary(provider) and is_binary(provider_uid) do
+    case Repo.get_by(OauthIdentity, provider: provider, provider_uid: provider_uid) do
+      nil -> nil
+      identity -> Repo.get(User, identity.user_id)
+    end
+  end
+
+  @doc """
+  Removes an identity. Refuses if doing so would leave the user with no
+  auth method.
+  """
+  def unlink_identity(%User{} = user, identity_id) when is_integer(identity_id) do
+    user = Repo.get!(User, user.id)
+
+    if has_other_auth_method?(user, exclude: {:oauth_identity, identity_id}) do
+      case Repo.get_by(OauthIdentity, id: identity_id, user_id: user.id) do
+        nil ->
+          {:error, Comn.Errors.Registry.error!("wagger.accounts/identity_not_found")}
+
+        identity ->
+          Repo.delete(identity)
+      end
+    else
+      {:error, Comn.Errors.Registry.error!("wagger.accounts/orphan_account",
+        message: "removing this would leave the account with no way to log in"
+      )}
+    end
+  end
+
   defp generate_api_key do
     :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
   end

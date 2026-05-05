@@ -161,4 +161,71 @@ defmodule Wagger.AccountsTest do
                Accounts.clear_password(user_with_pw)
     end
   end
+
+  describe "link_identity/3" do
+    test "creates an OauthIdentity for the given user" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "i@i.com"})
+
+      assert {:ok, identity} =
+               Accounts.link_identity(user, "google", %{
+                 provider_uid: "abc-123",
+                 email: "i@i.com",
+                 raw_info: "{}"
+               })
+
+      assert identity.user_id == user.id
+      assert identity.provider == "google"
+      assert identity.provider_uid == "abc-123"
+    end
+
+    test "rejects duplicate (provider, provider_uid)" do
+      {:ok, user1} = Accounts.register_oauth_user(%{email: "1@1.com"})
+      {:ok, user2} = Accounts.register_oauth_user(%{email: "2@2.com"})
+
+      {:ok, _} = Accounts.link_identity(user1, "google", %{provider_uid: "x", email: "1@1.com"})
+
+      assert {:error, cs} =
+               Accounts.link_identity(user2, "google", %{provider_uid: "x", email: "2@2.com"})
+
+      assert %{provider_uid: [_msg]} = errors_on(cs)
+    end
+  end
+
+  describe "find_user_by_identity/2" do
+    test "returns the user via the (provider, provider_uid) lookup" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "f@f.com"})
+
+      {:ok, _} =
+        Accounts.link_identity(user, "github", %{provider_uid: "g-1", email: "f@f.com"})
+
+      assert ^user = Accounts.find_user_by_identity("github", "g-1")
+    end
+
+    test "returns nil for unknown identity" do
+      assert is_nil(Accounts.find_user_by_identity("github", "nope"))
+    end
+  end
+
+  describe "unlink_identity/2" do
+    test "removes the identity when the user has another auth method" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "u@u.com"})
+      {:ok, _} = Accounts.set_password(user, "long-enough-pass")
+
+      {:ok, identity} =
+        Accounts.link_identity(user, "google", %{provider_uid: "u-1", email: "u@u.com"})
+
+      assert {:ok, _} = Accounts.unlink_identity(user, identity.id)
+      assert is_nil(Accounts.find_user_by_identity("google", "u-1"))
+    end
+
+    test "refuses when the identity is the only auth method" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "o@o.com"})
+
+      {:ok, identity} =
+        Accounts.link_identity(user, "google", %{provider_uid: "o-1", email: "o@o.com"})
+
+      assert {:error, %Comn.Errors.ErrorStruct{code: "wagger.accounts/orphan_account"}} =
+               Accounts.unlink_identity(user, identity.id)
+    end
+  end
 end

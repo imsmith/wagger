@@ -35,7 +35,7 @@ defmodule Wagger.Accounts.OauthIdentity do
     |> cast(attrs, [:provider, :provider_uid, :email, :raw_info, :user_id])
     |> validate_required([:provider, :provider_uid, :email, :user_id])
     |> validate_inclusion(:provider, @valid_providers)
-    |> unique_constraint([:provider, :provider_uid],
+    |> unique_constraint(:provider_uid,
       name: :oauth_identities_provider_provider_uid_index
     )
   end
