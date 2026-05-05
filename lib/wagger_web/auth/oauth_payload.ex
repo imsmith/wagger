@@ -16,11 +16,13 @@ defmodule WaggerWeb.Auth.OauthPayload do
 
   @doc "Builds a payload from an Ueberauth.Auth struct."
   def from_auth(auth) when is_map(auth) do
+    email = auth.info && auth.info.email
+
     %{
       provider: to_string(auth.provider),
       provider_uid: to_string(auth.uid),
-      email: auth.info && auth.info.email,
-      email_verified?: verified?(auth),
+      email: email,
+      email_verified?: is_binary(email) and verified?(auth),
       display_name: display_name(auth),
       raw_info: encode_raw(auth)
     }
@@ -51,12 +53,16 @@ defmodule WaggerWeb.Auth.OauthPayload do
 
   defp display_name(_), do: nil
 
+  # Stores the auth payload (minus credentials/tokens) as base64-encoded
+  # BERT for faithful forensic preservation. Decode with
+  # `Base.decode64!/1 |> :erlang.binary_to_term/1`. Falls back to "" on
+  # any error so callback handling never raises on a malformed payload.
   defp encode_raw(auth) do
-    safe = Map.drop(auth, [:credentials])
-    Eden.encode!(:erlang.term_to_binary(safe) |> Base.encode64())
+    auth
+    |> Map.drop([:credentials])
+    |> :erlang.term_to_binary()
+    |> Base.encode64()
   rescue
-    e in [ArgumentError, Protocol.UndefinedError] ->
-      _ = e
-      "{}"
+    _e in [ArgumentError, Protocol.UndefinedError] -> ""
   end
 end
