@@ -68,7 +68,8 @@ defmodule Wagger.MixProject do
       {:eden, "~> 2.1"},
       {:gettext, "~> 1.0", override: true},
       {:ex_yang, git: "https://github.com/imsmith/ex_yang.git", branch: "main"},
-      {:busybody, path: "../busybody", only: :dev}
+      {:busybody, path: "../busybody", only: :dev},
+      {:argon2_elixir, "~> 4.0"}
     ]
   end
 
