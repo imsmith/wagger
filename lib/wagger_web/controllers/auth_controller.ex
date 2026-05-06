@@ -94,7 +94,7 @@ defmodule WaggerWeb.AuthController do
         "display_name" => payload.display_name,
         "raw_info" => payload.raw_info
       })
-      |> redirect(to: "/auth/invite")
+      |> redirect(to: ~p"/auth/invite")
     end
   end
 
