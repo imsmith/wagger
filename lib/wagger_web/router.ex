@@ -37,6 +37,7 @@ defmodule WaggerWeb.Router do
     post "/auth/invite", AuthController, :invite_submit
     get "/auth/:provider", AuthController, :request
     get "/auth/:provider/callback", AuthController, :callback
+    get "/mcp/download/:token", McpDownloadController, :show
   end
 
   # --- Authenticated browser/LiveView ---
@@ -63,8 +64,6 @@ defmodule WaggerWeb.Router do
       live "/hub", HubListLive, :index
       live "/hub/:name", HubDetailLive, :show
     end
-
-    get "/mcp/download/:token", McpDownloadController, :show
   end
 
   # --- Admin ---

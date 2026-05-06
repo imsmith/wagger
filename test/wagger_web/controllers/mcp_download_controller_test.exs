@@ -2,10 +2,6 @@ defmodule WaggerWeb.McpDownloadControllerTest do
   @moduledoc false
   use WaggerWeb.ConnCase
 
-  setup %{conn: conn} do
-    {:ok, conn: log_in_as_user(conn)}
-  end
-
   @salt "mcp-download"
 
   test "valid token returns YANG body with attachment header", %{conn: conn} do
