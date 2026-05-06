@@ -54,6 +54,7 @@ defmodule WaggerWeb.Router do
       live "/applications/:id", AppDetailLive, :show
       live "/users", UserLive, :index
       live "/mcp", McpGeneratorLive, :index
+      live "/account", AccountLive, :show
     end
 
     live_session :hub,
