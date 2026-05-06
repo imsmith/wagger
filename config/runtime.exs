@@ -94,3 +94,7 @@ if config_env() == :prod do
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
 end
+
+if email = System.get_env("WAGGER_BOOTSTRAP_ADMIN_EMAIL") do
+  config :wagger, :bootstrap_admin_email, email
+end
