@@ -31,6 +31,16 @@ defmodule WaggerWeb.HubDetailLive do
 
   @providers ~w(aws azure caddy cloudflare coraza gcp nginx zap)
 
+  # UI grouping for the Generate Config provider buttons. Mirrors AppDetailLive.
+  @buckets [
+    {"Ingress Configs", ~w(aws azure caddy cloudflare coraza gcp nginx)},
+    {"Egress Configs", []},
+    {"Tools", ~w(zap)}
+  ]
+
+  @doc false
+  def buckets, do: @buckets
+
   @provider_modules %{
     "nginx" => Wagger.Generator.Nginx,
     "aws" => Wagger.Generator.Aws,

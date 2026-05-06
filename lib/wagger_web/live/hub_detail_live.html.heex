@@ -178,15 +178,26 @@
       Generate Config
     </div>
 
-    <div class="flex flex-wrap gap-1.5 mb-4">
-      <%= for provider <- @all_providers do %>
-        <button
-          phx-click="select_provider"
-          phx-value-provider={provider}
-          class={"text-xs px-3 py-1.5 rounded cursor-pointer transition-colors border #{if @selected_provider == provider, do: "bg-primary text-primary-content border-primary", else: "text-base-content border-neutral hover:border-primary"}"}
-        >
-          <%= String.capitalize(provider) %>
-        </button>
+    <div class="flex flex-col gap-2 mb-4">
+      <%= for {bucket_label, bucket_providers} <- buckets() do %>
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)] w-32">
+            <%= bucket_label %>
+          </span>
+          <%= if bucket_providers == [] do %>
+            <span class="text-xs italic text-[color:var(--tn-text-muted)]">(none yet)</span>
+          <% else %>
+            <%= for provider <- bucket_providers do %>
+              <button
+                phx-click="select_provider"
+                phx-value-provider={provider}
+                class={"text-xs px-3 py-1.5 rounded cursor-pointer transition-colors border #{if @selected_provider == provider, do: "bg-primary text-primary-content border-primary", else: "text-base-content border-neutral hover:border-primary"}"}
+              >
+                <%= String.capitalize(provider) %>
+              </button>
+            <% end %>
+          <% end %>
+        </div>
       <% end %>
     </div>
 

@@ -341,41 +341,45 @@
     <% end %>
   </div>
 
-  <%!-- Provider config sections --%>
-  <div class="space-y-2">
-    <div class="flex items-center gap-3 mb-2">
-      <span class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)]">
-        Provider Configs
-      </span>
-      <%= for provider <- @all_providers do %>
-        <% drift = Map.get(@drifts, provider) %>
-        <% has_snapshot = drift && drift.status != :never_generated %>
-        <%= if has_snapshot do %>
-          <button
-            phx-click="toggle_provider"
-            phx-value-provider={provider}
-            class="text-xs px-2 py-0.5 rounded text-[color:var(--tn-text-muted)] border border-neutral opacity-50 cursor-pointer hover:opacity-80 transition-opacity"
-          >
-            <%= String.capitalize(provider) %>
-          </button>
-        <% else %>
-          <button
-            phx-click="quick_generate"
-            phx-value-provider={provider}
-            class="text-xs px-2 py-0.5 rounded text-base-content border border-primary cursor-pointer hover:bg-primary hover:text-primary-content transition-colors"
-          >
-            + <%= String.capitalize(provider) %>
-          </button>
-        <% end %>
-      <% end %>
-    </div>
-
-    <% configured = Enum.filter(@all_providers, fn provider ->
+  <%!-- Provider config sections, grouped by bucket --%>
+  <%= for {bucket_label, bucket_providers} <- buckets() do %>
+    <% bucket_configured = Enum.filter(bucket_providers, fn provider ->
       drift = Map.get(@drifts, provider)
       drift && drift.status != :never_generated
     end) %>
+    <div class="space-y-2 mb-4">
+      <div class="flex items-center gap-3 mb-2 flex-wrap">
+        <span class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)]">
+          <%= bucket_label %>
+        </span>
+        <%= if bucket_providers == [] do %>
+          <span class="text-xs italic text-[color:var(--tn-text-muted)]">(none yet)</span>
+        <% else %>
+          <%= for provider <- bucket_providers do %>
+            <% drift = Map.get(@drifts, provider) %>
+            <% has_snapshot = drift && drift.status != :never_generated %>
+            <%= if has_snapshot do %>
+              <button
+                phx-click="toggle_provider"
+                phx-value-provider={provider}
+                class="text-xs px-2 py-0.5 rounded text-[color:var(--tn-text-muted)] border border-neutral opacity-50 cursor-pointer hover:opacity-80 transition-opacity"
+              >
+                <%= String.capitalize(provider) %>
+              </button>
+            <% else %>
+              <button
+                phx-click="quick_generate"
+                phx-value-provider={provider}
+                class="text-xs px-2 py-0.5 rounded text-base-content border border-primary cursor-pointer hover:bg-primary hover:text-primary-content transition-colors"
+              >
+                + <%= String.capitalize(provider) %>
+              </button>
+            <% end %>
+          <% end %>
+        <% end %>
+      </div>
 
-    <%= for provider <- configured do %>
+    <%= for provider <- bucket_configured do %>
       <% drift = Map.get(@drifts, provider) %>
       <% expanded = MapSet.member?(@expanded_providers, provider) %>
       <div class={[
@@ -496,7 +500,8 @@
         <% end %>
       </div>
     <% end %>
-  </div>
+    </div>
+  <% end %>
 
   <%!-- Import section --%>
   <div class="rounded-lg border border-neutral overflow-hidden">

@@ -17,6 +17,19 @@ defmodule WaggerWeb.AppDetailLive do
 
   @providers ~w(aws azure caddy cloudflare coraza gcp nginx zap)
 
+  # UI grouping for the provider configs section. Each tuple is
+  # {bucket_label, providers_in_order}. Empty bucket renders a "(none yet)"
+  # hint. The flat @providers list above is still the source of truth for
+  # drift/snapshot bookkeeping.
+  @buckets [
+    {"Ingress Configs", ~w(aws azure caddy cloudflare coraza gcp nginx)},
+    {"Egress Configs", []},
+    {"Tools", ~w(zap)}
+  ]
+
+  @doc false
+  def buckets, do: @buckets
+
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     app = Applications.get_application!(id)
