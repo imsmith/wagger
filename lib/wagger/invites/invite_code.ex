@@ -36,5 +36,6 @@ defmodule Wagger.Invites.InviteCode do
     |> cast(attrs, [:code, :label, :expires_at, :max_uses, :uses_count, :revoked_at, :created_by_user_id])
     |> validate_required([:code])
     |> unique_constraint(:code)
+    |> assoc_constraint(:created_by)
   end
 end

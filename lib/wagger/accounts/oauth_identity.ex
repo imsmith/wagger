@@ -38,5 +38,6 @@ defmodule Wagger.Accounts.OauthIdentity do
     |> unique_constraint(:provider_uid,
       name: :oauth_identities_provider_provider_uid_index
     )
+    |> assoc_constraint(:user)
   end
 end

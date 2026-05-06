@@ -56,5 +56,6 @@ defmodule Wagger.Accounts.User do
     |> unique_constraint(:username)
     |> unique_constraint(:email)
     |> unique_constraint(:api_key_hash)
+    |> assoc_constraint(:invite_code)
   end
 end
