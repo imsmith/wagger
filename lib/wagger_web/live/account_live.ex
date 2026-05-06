@@ -18,8 +18,16 @@ defmodule WaggerWeb.AccountLive do
       {:ok, _} ->
         {:noreply, socket |> put_flash(:info, "Password set.") |> assign_state()}
 
-      {:error, _cs} ->
-        {:noreply, put_flash(socket, :error, "Password must be at least 12 characters.")}
+      {:error, cs} ->
+        msg = password_error_message(cs)
+        {:noreply, put_flash(socket, :error, msg)}
+    end
+  end
+
+  defp password_error_message(%Ecto.Changeset{} = cs) do
+    case Keyword.get_values(cs.errors, :password_hash) do
+      [{msg, _opts} | _] -> "Password " <> msg
+      [] -> "Couldn't update password."
     end
   end
 
