@@ -28,6 +28,25 @@ defmodule WaggerWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import WaggerWeb.ConnCase
+
+      def log_in_as(conn, user) do
+        Plug.Test.init_test_session(conn, user_id: user.id)
+      end
+
+      def log_in_as_admin(conn) do
+        {:ok, user} = Wagger.Accounts.register_oauth_user(%{
+          email: "admin#{System.unique_integer([:positive])}@x.com",
+          role: "admin"
+        })
+        log_in_as(conn, user)
+      end
+
+      def log_in_as_user(conn) do
+        {:ok, user} = Wagger.Accounts.register_oauth_user(%{
+          email: "user#{System.unique_integer([:positive])}@x.com"
+        })
+        log_in_as(conn, user)
+      end
     end
   end
 

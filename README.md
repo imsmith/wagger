@@ -40,6 +40,26 @@ docker run -p 4000:4000 \
 
 Either way, open [localhost:4000](http://localhost:4000).
 
+## Authentication
+
+The browser/LiveView surface is gated behind login. Users sign in via
+Google OAuth, GitHub OAuth, or local password (after first OAuth login).
+First-time access is bootstrapped via `WAGGER_BOOTSTRAP_ADMIN_EMAIL`:
+the OAuth login matching this email is auto-promoted to admin and
+bypasses the invite-code gate.
+
+> **Important:** unset `WAGGER_BOOTSTRAP_ADMIN_EMAIL` on the deploy after the first admin signs in. Leaving it set means any OAuth identity matching that email becomes admin on a fresh sign-in.
+
+OAuth provider credentials live encrypted in the database (via
+`Wagger.Secrets`). For first-time bootstrap, set the env vars
+`GOOGLE_OAUTH_CLIENT_ID`/`SECRET` and/or `GITHUB_OAUTH_CLIENT_ID`/`SECRET`;
+they will be read on boot, stored encrypted, and the env vars can then be
+removed from the deploy. Subsequent rotation happens via the admin UI at
+`/admin/oauth`.
+
+Invite codes (admin UI at `/admin/invites`) gate new-user registration.
+The API path remains on its existing Bearer-API-key authentication.
+
 ## Dependencies
 
 Wagger pulls two libraries that are also ours:

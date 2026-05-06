@@ -5,6 +5,10 @@ defmodule WaggerWeb.UserLiveTest do
 
   import Phoenix.LiveViewTest
 
+  setup %{conn: conn} do
+    {:ok, conn: log_in_as_user(conn)}
+  end
+
   alias Wagger.Accounts
 
   defp create_user(_context) do

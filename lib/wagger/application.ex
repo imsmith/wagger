@@ -14,6 +14,7 @@ defmodule Wagger.Application do
        repos: Application.fetch_env!(:wagger, :ecto_repos), skip: skip_migrations?()},
       {DNSCluster, query: Application.get_env(:wagger, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Wagger.PubSub},
+      {Task, fn -> Wagger.OauthCredentials.load_into_app_env() end},
       # Start a worker by calling: Wagger.Worker.start_link(arg)
       # {Wagger.Worker, arg},
       # Start to serve requests, typically the last entry

@@ -5,6 +5,10 @@ defmodule WaggerWeb.DashboardLiveTest do
 
   import Phoenix.LiveViewTest
 
+  setup %{conn: conn} do
+    {:ok, conn: log_in_as_user(conn)}
+  end
+
   alias Wagger.Applications
   alias Wagger.Drift
   alias Wagger.Routes

@@ -10,7 +10,8 @@ defmodule WaggerWeb.AppDetailLiveTest do
   alias Wagger.Routes
   alias Wagger.Snapshots
 
-  setup do
+  setup %{conn: conn} do
+    conn = log_in_as_user(conn)
     {:ok, app} =
       Applications.create_application(%{
         "name" => "test-app",
@@ -39,7 +40,7 @@ defmodule WaggerWeb.AppDetailLiveTest do
         "path_type" => "exact"
       })
 
-    %{app: app}
+    %{app: app, conn: conn}
   end
 
   describe "AppDetailLive" do

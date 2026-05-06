@@ -1,0 +1,44 @@
+<main class="mx-auto max-w-md px-4 py-12">
+  <h1 class="text-2xl font-semibold">Sign in</h1>
+
+  <Layouts.flash_group flash={@flash} />
+
+  <div class="mt-6 space-y-3">
+    <a
+      :if={@providers.google}
+      href={~p"/auth/google"}
+      class="flex w-full items-center justify-center rounded border px-4 py-2 hover:bg-gray-50"
+    >
+      Sign in with Google
+    </a>
+    <button :if={!@providers.google} disabled
+      class="flex w-full items-center justify-center rounded border px-4 py-2 text-gray-400">
+      Sign in with Google (not configured)
+    </button>
+
+    <a
+      :if={@providers.github}
+      href={~p"/auth/github"}
+      class="flex w-full items-center justify-center rounded border px-4 py-2 hover:bg-gray-50"
+    >
+      Sign in with GitHub
+    </a>
+    <button :if={!@providers.github} disabled
+      class="flex w-full items-center justify-center rounded border px-4 py-2 text-gray-400">
+      Sign in with GitHub (not configured)
+    </button>
+  </div>
+
+  <div class="my-6 text-center text-sm text-gray-500">or</div>
+
+  <form method="post" action={~p"/login"} class="space-y-3">
+    <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+    <input type="email" name="email" required placeholder="email"
+      class="w-full rounded border px-3 py-2" />
+    <input type="password" name="password" required placeholder="password"
+      class="w-full rounded border px-3 py-2" />
+    <button type="submit" class="w-full rounded bg-blue-600 px-4 py-2 text-white">
+      Sign in with password
+    </button>
+  </form>
+</main>

@@ -51,6 +51,14 @@ defmodule Wagger.Errors do
     message: "Cannot delete the admin user",
     status: 403
 
+  register_error "wagger.accounts/orphan_account", :validation,
+    message: "Removing this would leave the account with no way to log in",
+    status: 409
+
+  register_error "wagger.accounts/identity_not_found", :validation,
+    message: "OAuth identity not found",
+    status: 404
+
   # -- Snapshots --
 
   register_error "wagger.snapshots/decryption_failed", :internal,
