@@ -1,0 +1,54 @@
+<main class="mx-auto max-w-4xl px-4 py-8">
+  <h1 class="text-2xl font-semibold">Invite codes</h1>
+
+  <div :if={@new_code_revealed} class="mt-4 rounded border border-green-300 bg-green-50 p-3">
+    <p class="text-sm font-medium">New code:</p>
+    <code class="font-mono">{@new_code_revealed}</code>
+  </div>
+
+  <form id="new-code-form" phx-submit="create" class="mt-6 grid grid-cols-3 gap-3 items-end">
+    <div>
+      <label class="text-sm">Label</label>
+      <input name="invite[label]" class="w-full rounded border px-2 py-1" />
+    </div>
+    <div>
+      <label class="text-sm">Max uses</label>
+      <input type="number" name="invite[max_uses]" class="w-full rounded border px-2 py-1" />
+    </div>
+    <div>
+      <label class="text-sm">Expires (ISO 8601)</label>
+      <input name="invite[expires_at]" placeholder="2099-01-01T00:00:00Z"
+        class="w-full rounded border px-2 py-1" />
+    </div>
+    <button type="submit" class="col-span-3 rounded bg-blue-600 px-4 py-2 text-white">
+      Generate code
+    </button>
+  </form>
+
+  <table class="mt-8 w-full text-sm">
+    <thead class="text-left">
+      <tr>
+        <th class="py-2">Code</th>
+        <th>Label</th>
+        <th>Status</th>
+        <th>Uses</th>
+        <th>Expires</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr :for={c <- @codes} class="border-t">
+        <td class="py-2 font-mono">{c.code}</td>
+        <td>{c.label}</td>
+        <td>{c.status}</td>
+        <td>{c.uses_count}{if c.max_uses, do: "/" <> Integer.to_string(c.max_uses)}</td>
+        <td>{c.expires_at}</td>
+        <td>
+          <button :if={c.status == :active}
+            phx-click="revoke" phx-value-id={c.id}
+            class="text-red-600 hover:underline">Revoke</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</main>
