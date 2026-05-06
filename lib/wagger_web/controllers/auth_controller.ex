@@ -66,6 +66,12 @@ defmodule WaggerWeb.AuthController do
     end
   end
 
+  # Routes a new-email registration to either the bootstrap-admin path or
+  # the invite-code prompt.
+  #
+  # HAZARD: leaving WAGGER_BOOTSTRAP_ADMIN_EMAIL set after first admin
+  # sign-in means any OAuth identity matching that email becomes admin.
+  # Unset the env var on the deploy after first use.
   defp register_new_email(conn, payload) do
     bootstrap = Application.get_env(:wagger, :bootstrap_admin_email)
 

@@ -48,6 +48,8 @@ First-time access is bootstrapped via `WAGGER_BOOTSTRAP_ADMIN_EMAIL`:
 the OAuth login matching this email is auto-promoted to admin and
 bypasses the invite-code gate.
 
+> **Important:** unset `WAGGER_BOOTSTRAP_ADMIN_EMAIL` on the deploy after the first admin signs in. Leaving it set means any OAuth identity matching that email becomes admin on a fresh sign-in.
+
 OAuth provider credentials live encrypted in the database (via
 `Wagger.Secrets`). For first-time bootstrap, set the env vars
 `GOOGLE_OAUTH_CLIENT_ID`/`SECRET` and/or `GITHUB_OAUTH_CLIENT_ID`/`SECRET`;
