@@ -42,7 +42,7 @@ defmodule Wagger.InvitesTest do
   describe "list_codes/0" do
     test "returns codes newest-first with computed status" do
       {:ok, _} = Invites.create_code(%{label: "active"})
-      {:ok, expired} = Invites.create_code(%{label: "old", expires_at: "2000-01-01T00:00:00Z"})
+      {:ok, _expired} = Invites.create_code(%{label: "old", expires_at: "2000-01-01T00:00:00Z"})
       {:ok, revoked} = Invites.create_code(%{label: "rev"})
       {:ok, _} = Invites.revoke(revoked)
 
