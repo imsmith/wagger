@@ -3,6 +3,10 @@ defmodule WaggerWeb.McpGeneratorLiveTest do
   use WaggerWeb.ConnCase
   import Phoenix.LiveViewTest
 
+  setup %{conn: conn} do
+    {:ok, conn: log_in_as_user(conn)}
+  end
+
   @valid_yang """
   module demo {
     yang-version 1.1;

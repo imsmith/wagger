@@ -12,29 +12,23 @@ defmodule WaggerWeb.Router do
     plug WaggerWeb.Plugs.FetchCurrentUser
   end
 
+  pipeline :authenticated do
+    plug WaggerWeb.Plugs.RequireUser
+  end
+
+  pipeline :admin do
+    plug WaggerWeb.Plugs.RequireAdmin
+  end
+
   pipeline :api do
     plug :accepts, ["json", "edn"]
     plug WaggerWeb.Plugs.ApiVersion
     plug WaggerWeb.Plugs.Authenticate
   end
 
+  # --- Public surface ---
   scope "/", WaggerWeb do
     pipe_through :browser
-
-    live_session :default, on_mount: [{WaggerWeb.Hooks.NavHook, :default}] do
-      live "/", DashboardLive, :index
-      live "/applications", AppListLive, :index
-      live "/applications/:id", AppDetailLive, :show
-      live "/users", UserLive, :index
-      live "/mcp", McpGeneratorLive, :index
-    end
-
-    live_session :hub, on_mount: [{WaggerWeb.Hooks.NavHook, :default}] do
-      live "/hub", HubListLive, :index
-      live "/hub/:name", HubDetailLive, :show
-    end
-
-    get "/mcp/download/:token", McpDownloadController, :show
 
     get "/login", SessionController, :new
     post "/login", SessionController, :create
@@ -45,6 +39,49 @@ defmodule WaggerWeb.Router do
     get "/auth/:provider/callback", AuthController, :callback
   end
 
+  # --- Authenticated browser/LiveView ---
+  scope "/", WaggerWeb do
+    pipe_through [:browser, :authenticated]
+
+    live_session :default,
+      on_mount: [
+        {WaggerWeb.Hooks.AuthHook, :require_user},
+        {WaggerWeb.Hooks.NavHook, :default}
+      ] do
+      live "/", DashboardLive, :index
+      live "/applications", AppListLive, :index
+      live "/applications/:id", AppDetailLive, :show
+      live "/users", UserLive, :index
+      live "/mcp", McpGeneratorLive, :index
+    end
+
+    live_session :hub,
+      on_mount: [
+        {WaggerWeb.Hooks.AuthHook, :require_user},
+        {WaggerWeb.Hooks.NavHook, :default}
+      ] do
+      live "/hub", HubListLive, :index
+      live "/hub/:name", HubDetailLive, :show
+    end
+
+    get "/mcp/download/:token", McpDownloadController, :show
+  end
+
+  # --- Admin ---
+  scope "/admin", WaggerWeb do
+    pipe_through [:browser, :authenticated, :admin]
+
+    live_session :admin,
+      on_mount: [
+        {WaggerWeb.Hooks.AuthHook, :require_admin},
+        {WaggerWeb.Hooks.NavHook, :default}
+      ] do
+      live "/invites", InviteCodeLive, :index
+      live "/oauth", OauthCredentialsLive, :index
+    end
+  end
+
+  # --- API (unchanged) ---
   scope "/api", WaggerWeb do
     pipe_through :api
 
