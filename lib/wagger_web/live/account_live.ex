@@ -24,13 +24,6 @@ defmodule WaggerWeb.AccountLive do
     end
   end
 
-  defp password_error_message(%Ecto.Changeset{} = cs) do
-    case Keyword.get_values(cs.errors, :password_hash) do
-      [{msg, _opts} | _] -> "Password " <> msg
-      [] -> "Couldn't update password."
-    end
-  end
-
   def handle_event("clear_password", _params, socket) do
     case Accounts.clear_password(socket.assigns.current_user) do
       {:ok, _} ->
@@ -48,6 +41,13 @@ defmodule WaggerWeb.AccountLive do
 
       {:error, %{message: msg}} ->
         {:noreply, put_flash(socket, :error, msg)}
+    end
+  end
+
+  defp password_error_message(%Ecto.Changeset{} = cs) do
+    case Keyword.get_values(cs.errors, :password_hash) do
+      [{msg, _opts} | _] -> "Password " <> msg
+      [] -> "Couldn't update password."
     end
   end
 
