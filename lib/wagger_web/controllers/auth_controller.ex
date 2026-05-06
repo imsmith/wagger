@@ -8,7 +8,9 @@ defmodule WaggerWeb.AuthController do
 
   alias Wagger.Accounts
   alias WaggerWeb.Auth.OauthPayload
+  alias WaggerWeb.AuthHTML
 
+  plug :put_view, html: AuthHTML
   plug Ueberauth when action in [:request]
   plug :run_ueberauth_callback when action in [:callback]
 
@@ -95,6 +97,43 @@ defmodule WaggerWeb.AuthController do
       |> redirect(to: "/auth/invite")
     end
   end
+
+  def invite_form(conn, _params) do
+    case get_session(conn, :pending_oauth) do
+      nil -> redirect(conn, to: ~p"/login")
+      _ -> render(conn, :invite, layout: false)
+    end
+  end
+
+  def invite_submit(conn, %{"code" => code}) do
+    case get_session(conn, :pending_oauth) do
+      nil ->
+        redirect(conn, to: ~p"/login")
+
+      payload ->
+        case Wagger.Invites.redeem(code, %{
+               provider: payload["provider"],
+               provider_uid: payload["provider_uid"],
+               email: payload["email"],
+               display_name: payload["display_name"],
+               raw_info: payload["raw_info"]
+             }) do
+          {:ok, user} ->
+            log_in(conn, user)
+
+          {:error, reason} ->
+            conn
+            |> put_flash(:error, invite_error_message(reason))
+            |> render(:invite, layout: false)
+        end
+    end
+  end
+
+  defp invite_error_message(:not_found), do: "That invite code is not recognized."
+  defp invite_error_message(:revoked), do: "That invite code has been revoked."
+  defp invite_error_message(:expired), do: "That invite code has expired."
+  defp invite_error_message(:exhausted), do: "That invite code has no uses left."
+  defp invite_error_message(_), do: "That invite code can't be used."
 
   defp log_in(conn, user) do
     return_to = get_session(conn, :return_to) || "/"

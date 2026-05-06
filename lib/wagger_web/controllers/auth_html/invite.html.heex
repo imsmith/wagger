@@ -1,0 +1,23 @@
+<main class="mx-auto max-w-md px-4 py-12">
+  <h1 class="text-2xl font-semibold">Enter your invite code</h1>
+  <p class="text-sm text-gray-500 mt-2">
+    Wagger needs an invite code to finish creating your account.
+  </p>
+
+  <Layouts.flash_group flash={@flash} />
+
+  <form method="post" action={~p"/auth/invite"} class="mt-6 space-y-4">
+    <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+    <input
+      type="text"
+      name="code"
+      autofocus
+      required
+      class="w-full rounded border px-3 py-2"
+      placeholder="invite code"
+    />
+    <button type="submit" class="w-full rounded bg-blue-600 px-4 py-2 text-white">
+      Continue
+    </button>
+  </form>
+</main>

@@ -107,4 +107,64 @@ defmodule WaggerWeb.AuthControllerTest do
                get_session(conn, :pending_oauth)
     end
   end
+
+  alias Wagger.Invites
+
+  describe "invite_form/2" do
+    test "redirects to /login when no pending OAuth in session", %{conn: conn} do
+      conn = get(conn, ~p"/auth/invite")
+      assert redirected_to(conn) == ~p"/login"
+    end
+
+    test "renders the form when pending OAuth is in session", %{conn: conn} do
+      conn =
+        conn
+        |> Plug.Test.init_test_session(pending_oauth: %{
+          "provider" => "google",
+          "provider_uid" => "x",
+          "email" => "x@y.com",
+          "display_name" => "X",
+          "raw_info" => ""
+        })
+        |> get(~p"/auth/invite")
+
+      assert html_response(conn, 200) =~ "invite code"
+    end
+  end
+
+  describe "invite_submit/2" do
+    setup %{conn: conn} do
+      conn =
+        Plug.Test.init_test_session(conn, pending_oauth: %{
+          "provider" => "google",
+          "provider_uid" => "p-1",
+          "email" => "p@p.com",
+          "display_name" => "P",
+          "raw_info" => ""
+        })
+
+      {:ok, code} = Invites.create_code(%{label: "ok"})
+      %{conn: conn, code: code}
+    end
+
+    test "valid code creates user, logs in, redirects to /", %{conn: conn, code: code} do
+      conn = post(conn, ~p"/auth/invite", %{"code" => code.code})
+
+      assert redirected_to(conn) == "/"
+      assert is_integer(get_session(conn, :user_id))
+      user = Wagger.Repo.get_by!(Wagger.Accounts.User, email: "p@p.com")
+      assert user.invite_code_id == code.id
+    end
+
+    test "invalid code stays on page with flash", %{conn: conn} do
+      conn = post(conn, ~p"/auth/invite", %{"code" => "bad-code"})
+      assert html_response(conn, 200) =~ "invite code"
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "not recognized"
+    end
+
+    test "missing pending session redirects to /login", %{conn: _conn} do
+      conn = post(build_conn(), ~p"/auth/invite", %{"code" => "anything"})
+      assert redirected_to(conn) == ~p"/login"
+    end
+  end
 end

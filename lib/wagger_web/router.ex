@@ -37,6 +37,8 @@ defmodule WaggerWeb.Router do
 
     get "/login", SessionController, :new
     delete "/logout", SessionController, :delete
+    get "/auth/invite", AuthController, :invite_form
+    post "/auth/invite", AuthController, :invite_submit
     get "/auth/:provider", AuthController, :request
     get "/auth/:provider/callback", AuthController, :callback
   end
