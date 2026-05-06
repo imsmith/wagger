@@ -12,8 +12,17 @@ defmodule WaggerWeb.Hooks.AuthHook do
 
   def on_mount(:require_user, _params, %{"user_id" => user_id}, socket) when is_integer(user_id) do
     case Repo.get(User, user_id) do
-      nil -> halt_to_login(socket)
-      %User{} = user -> {:cont, assign(socket, :current_user, user)}
+      nil ->
+        halt_to_login(socket)
+
+      %User{} = user ->
+        Comn.Contexts.new(%{
+          request_id: generate_request_id(),
+          user_id: to_string(user.id),
+          actor: user.username
+        })
+
+        {:cont, assign(socket, :current_user, user)}
     end
   end
 
@@ -37,5 +46,9 @@ defmodule WaggerWeb.Hooks.AuthHook do
 
   defp halt_to_login(socket) do
     {:halt, socket |> put_flash(:error, "You need to sign in.") |> redirect(to: "/login")}
+  end
+
+  defp generate_request_id do
+    :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)
   end
 end
