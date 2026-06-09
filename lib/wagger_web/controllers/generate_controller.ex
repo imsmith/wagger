@@ -22,6 +22,7 @@ defmodule WaggerWeb.GenerateController do
   action_fallback WaggerWeb.FallbackController
 
   @providers %{
+    "apache" => Wagger.Generator.Apache,
     "nginx" => Wagger.Generator.Nginx,
     "aws" => Wagger.Generator.Aws,
     "cloudflare" => Wagger.Generator.Cloudflare,

@@ -15,14 +15,14 @@ defmodule WaggerWeb.AppDetailLive do
   alias Wagger.Routes
   alias Wagger.Snapshots
 
-  @providers ~w(aws azure caddy cloudflare coraza gcp nginx zap)
+  @providers ~w(apache aws azure caddy cloudflare coraza gcp nginx zap)
 
   # UI grouping for the provider configs section. Each tuple is
   # {bucket_label, providers_in_order}. Empty bucket renders a "(none yet)"
   # hint. The flat @providers list above is still the source of truth for
   # drift/snapshot bookkeeping.
   @buckets [
-    {"Ingress Configs", ~w(aws azure caddy cloudflare coraza gcp nginx)},
+    {"Ingress Configs", ~w(apache aws azure caddy cloudflare coraza gcp nginx)},
     {"Egress Configs", []},
     {"Tools", ~w(zap)}
   ]
@@ -205,6 +205,7 @@ defmodule WaggerWeb.AppDetailLive do
   end
 
   @provider_modules %{
+    "apache" => Wagger.Generator.Apache,
     "nginx" => Wagger.Generator.Nginx,
     "aws" => Wagger.Generator.Aws,
     "cloudflare" => Wagger.Generator.Cloudflare,
@@ -234,6 +235,13 @@ defmodule WaggerWeb.AppDetailLive do
     "coraza" => [
       {"prefix", "Name prefix", :text},
       {"start_rule_id", "Starting rule ID (default 100001)", :text}
+    ],
+    "apache" => [
+      {"prefix", "Name prefix", :text},
+      {"start_rule_id", "Starting rule ID (default 100001)", :text},
+      {"audit_log_path", "Audit log path (default /var/log/apache2/modsec_audit.log)", :text},
+      {"tmp_dir", "SecTmpDir (default /tmp)", :text},
+      {"data_dir", "SecDataDir (default /var/cache/modsecurity)", :text}
     ],
     "zap" => [
       {"prefix", "Name prefix", :text},

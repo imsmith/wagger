@@ -13,7 +13,7 @@ defmodule WaggerWeb.DashboardLive do
   alias Wagger.Import
   alias Wagger.Routes
 
-  @providers ~w(aws azure caddy cloudflare coraza gcp nginx zap)
+  @providers ~w(apache aws azure caddy cloudflare coraza gcp nginx zap)
 
   @impl true
   def mount(_params, _session, socket) do
