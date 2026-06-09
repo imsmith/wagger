@@ -7,21 +7,12 @@ defmodule Wagger.Generator.SecRule do
   surrounding packaging differs per provider.
   """
 
+  alias Wagger.Generator.PathHelper
+
   @default_start_rule_id 100_001
   @catch_all_offset 90_000
 
-  @doc "Default first rule ID when config supplies none."
-  def default_start_rule_id, do: @default_start_rule_id
-
-  @doc "Offset added to the start rule ID to derive the catch-all rule ID."
-  def catch_all_offset, do: @catch_all_offset
-
-  @doc """
-  Builds the per-route rule list plus the start/catch-all IDs from routes and
-  config. Returns `%{rules: [...], start_id: integer, catch_all_id: integer}`.
-  Each rule is a string-keyed map: `id`, `path-pattern`, `methods`, optional
-  `description`, optional `rate-limit-comment`.
-  """
+  @doc "Builds per-route rules plus start/catch-all IDs; returns %{rules:, start_id:, catch_all_id:}."
   def build_rules(routes, config) do
     start_id = parse_int(config, "start_rule_id", @default_start_rule_id)
 
@@ -35,7 +26,7 @@ defmodule Wagger.Generator.SecRule do
 
   defp build_rule(route, id) do
     r = normalize(route)
-    pattern = Wagger.Generator.PathHelper.to_regex(r)
+    pattern = PathHelper.to_regex(r)
 
     base = %{
       "id" => id,
@@ -101,8 +92,7 @@ defmodule Wagger.Generator.SecRule do
     """
   end
 
-  @doc false
-  def normalize(route) do
+  defp normalize(route) do
     %{
       path: route[:path] || route["path"],
       path_type: route[:path_type] || route["path_type"],
@@ -112,23 +102,21 @@ defmodule Wagger.Generator.SecRule do
     }
   end
 
-  @doc false
-  def original_path_from_pattern(pattern) do
+  defp original_path_from_pattern(pattern) do
     pattern
     |> String.replace_prefix("^", "")
     |> String.replace_suffix("$", "")
     |> String.replace_suffix(".*", "/")
   end
 
-  @doc false
+  @doc "ISO 8601 second-precision UTC timestamp."
   def iso8601_now do
     DateTime.utc_now()
     |> DateTime.truncate(:second)
     |> DateTime.to_iso8601()
   end
 
-  @doc false
-  def parse_int(config, key, default) do
+  defp parse_int(config, key, default) do
     val = config[String.to_atom(key)] || config[key]
 
     case val do
