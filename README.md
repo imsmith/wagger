@@ -2,7 +2,7 @@
 
 Your application has a finite set of valid endpoints. Your WAF should know about them. Wagger bridges the gap: define your routes once, generate WAF configs for whatever platform you're deploying to.
 
-Eight generators ship today -- AWS WAF, Cloudflare, Azure Front Door, GCP Cloud Armor, Nginx, Caddy, Coraza/ModSecurity, and an OWASP ZAP test plan generator that verifies your deployed config is actually blocking what it should.
+Nine generators ship today -- AWS WAF, Cloudflare, Azure Front Door, GCP Cloud Armor, Nginx, Caddy, Apache (mod_security2), Coraza/ModSecurity, and an OWASP ZAP test plan generator that verifies your deployed config is actually blocking what it should.
 
 Import routes from OpenAPI specs, bulk text, or access logs. Share API definitions through the public Hub. Get notified when your routes drift from the last generated config.
 
