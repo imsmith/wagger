@@ -108,5 +108,11 @@ defmodule Wagger.Generator.ApacheTest do
       assert {:ok, output} = Generator.generate(Apache, @routes, config)
       assert output =~ "SecRuleEngine DetectionOnly"
     end
+
+    test "directives inside the IfModule guard are indented two spaces" do
+      assert {:ok, output} = Generator.generate(Apache, @routes, @config)
+      assert output =~ "  SecRuleEngine On"
+      assert output =~ ~s(  SecRule REQUEST_URI "@rx ^/api/users$" "id:100001,phase:1,chain,allow")
+    end
   end
 end
