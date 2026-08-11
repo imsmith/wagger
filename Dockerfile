@@ -17,11 +17,12 @@ COPY mix.exs mix.lock ./
 RUN mix deps.get --only prod
 RUN mix deps.compile
 
-COPY config/config.exs config/runtime.exs config/
+COPY config/config.exs config/prod.exs config/runtime.exs config/
 COPY lib lib
 COPY priv priv
 COPY yang yang
 COPY assets assets
+COPY rel rel
 
 RUN mix assets.setup
 RUN mix assets.deploy
@@ -43,6 +44,6 @@ RUN mkdir -p /data
 
 COPY --from=build /app/_build/prod/rel/wagger ./
 
-EXPOSE 4000
+EXPOSE 8080
 
 CMD ["bin/wagger", "start"]

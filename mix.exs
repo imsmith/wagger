@@ -91,6 +91,7 @@ defmodule Wagger.MixProject do
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind wagger", "esbuild wagger"],
       "assets.deploy": [
+        "compile",
         "tailwind wagger --minify",
         "esbuild wagger --minify",
         "phx.digest"
