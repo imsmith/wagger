@@ -108,7 +108,7 @@ defmodule Wagger.Accounts do
 
   @doc "Returns the user with the given email, or nil."
   def get_user_by_email(email) when is_binary(email) do
-    Repo.get_by(User, email: email)
+    Repo.get_by(User, email: User.normalize_email(email))
   end
 
   @doc """

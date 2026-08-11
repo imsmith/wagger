@@ -35,6 +35,14 @@ defmodule Wagger.Accounts.User do
   def timestamp_now, do: DateTime.to_string(DateTime.utc_now())
 
   @doc """
+  Canonical form of an email address: trimmed and downcased. Applied on
+  write and on lookup so that an address entered with stray capitals or
+  padding still matches the stored row.
+  """
+  def normalize_email(nil), do: nil
+  def normalize_email(email) when is_binary(email), do: email |> String.trim() |> String.downcase()
+
+  @doc """
   Changeset for creating or updating a User.
   """
   def changeset(user, attrs) do
@@ -48,6 +56,7 @@ defmodule Wagger.Accounts.User do
       :api_key_hash,
       :invite_code_id
     ])
+    |> update_change(:email, &normalize_email/1)
     |> validate_required([:username])
     |> validate_format(:username, ~r/^[a-z0-9][a-z0-9\-]*$/,
       message: "must be a lowercase slug (letters, digits, hyphens)"

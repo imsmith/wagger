@@ -9,6 +9,13 @@ defmodule WaggerWeb.SessionControllerTest do
       conn = get(conn, ~p"/login")
       assert html_response(conn, 200) =~ "Sign in"
     end
+
+    test "the password field can be revealed", %{conn: conn} do
+      html = conn |> get(~p"/login") |> html_response(200)
+
+      assert html =~ ~s(id="password-toggle")
+      assert html =~ ~s(aria-controls="password-field")
+    end
   end
 
   describe "create/2" do

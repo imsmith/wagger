@@ -104,6 +104,26 @@ defmodule Wagger.AccountsTest do
     test "returns nil when no user matches" do
       assert is_nil(Accounts.get_user_by_email("nobody@nowhere.com"))
     end
+
+    test "matches regardless of case" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "mixed@case.com"})
+
+      assert %{id: id} = Accounts.get_user_by_email("Mixed@Case.com")
+      assert id == user.id
+    end
+
+    test "ignores surrounding whitespace" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "spaced@out.com"})
+
+      assert %{id: id} = Accounts.get_user_by_email("  spaced@out.com ")
+      assert id == user.id
+    end
+
+    test "stores the address downcased and trimmed" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: " Loud@SHOUTING.com "})
+
+      assert user.email == "loud@shouting.com"
+    end
   end
 
   describe "set_password/2 and authenticate_by_password/2" do
@@ -125,6 +145,14 @@ defmodule Wagger.AccountsTest do
       {:ok, user} = Accounts.register_oauth_user(%{email: "s@s.com"})
       assert {:error, cs} = Accounts.set_password(user, "short")
       assert %{password_hash: [_msg]} = errors_on(cs)
+    end
+
+    test "authenticate_by_password accepts a differently-cased or padded address" do
+      {:ok, user} = Accounts.register_oauth_user(%{email: "case@login.com"})
+      {:ok, _} = Accounts.set_password(user, "correct-horse-battery")
+
+      assert {:ok, _} = Accounts.authenticate_by_password("Case@Login.com", "correct-horse-battery")
+      assert {:ok, _} = Accounts.authenticate_by_password(" case@login.com ", "correct-horse-battery")
     end
 
     test "authenticate_by_password returns :invalid_credentials for unknown email" do

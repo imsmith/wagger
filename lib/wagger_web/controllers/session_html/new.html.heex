@@ -31,14 +31,55 @@
 
   <div class="my-6 text-center text-sm text-gray-500">or</div>
 
-  <form method="post" action={~p"/login"} class="space-y-3">
+  <form method="post" action={~p"/login"} id="password-form" class="space-y-3">
     <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
     <input type="email" name="email" required placeholder="email"
+      autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"
       class="w-full rounded border px-3 py-2" />
-    <input type="password" name="password" required placeholder="password"
-      class="w-full rounded border px-3 py-2" />
+    <div class="relative">
+      <input type="password" name="password" id="password-field" required placeholder="password"
+        autocomplete="current-password"
+        class="w-full rounded border py-2 pl-3 pr-16" />
+      <button type="button" id="password-toggle" aria-controls="password-field" aria-pressed="false"
+        class="absolute inset-y-0 right-0 px-3 text-sm text-gray-600 hover:text-gray-900">
+        Show
+      </button>
+    </div>
     <button type="submit" class="w-full rounded bg-blue-600 px-4 py-2 text-white">
       Sign in with password
     </button>
   </form>
+
+  <script>
+    (() => {
+      const form = document.getElementById("password-form");
+      const field = document.getElementById("password-field");
+      const toggle = document.getElementById("password-toggle");
+
+      toggle.addEventListener("click", () => {
+        const revealed = field.type === "text";
+        field.type = revealed ? "password" : "text";
+        toggle.textContent = revealed ? "Show" : "Hide";
+        toggle.setAttribute("aria-pressed", String(!revealed));
+        field.focus();
+      });
+
+      // A reload should present an empty form rather than the values the
+      // browser restored, and the password should never come back revealed.
+      // Reset only on reload or back/forward-cache restore, so a password
+      // manager filling a fresh page load is left alone.
+      window.addEventListener("pageshow", (event) => {
+        const reloaded =
+          event.persisted ||
+          performance.getEntriesByType("navigation")[0]?.type === "reload";
+
+        if (!reloaded) return;
+
+        form.reset();
+        field.type = "password";
+        toggle.textContent = "Show";
+        toggle.setAttribute("aria-pressed", "false");
+      });
+    })();
+  </script>
 </main>
