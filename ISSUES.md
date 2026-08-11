@@ -1,5 +1,264 @@
 # ISSUES
 
+Newest first.
+
+## A fresh deployment has no way to create its first user
+
+**Filed:** 2026-08-11
+**Reported from:** first Fly.io deploy
+
+### Symptom
+
+Deploying to a new environment produces a database with zero users. Every
+browser route then redirects to `/login`, and no path in the application can
+create an account:
+
+- There are no default credentials. `priv/repo/seeds.exs` inserts nothing, and
+  the release does not run seeds in any case.
+- There is no sign-up route. `lib/wagger_web/router.ex:30-39` exposes only
+  `/login`, `/logout`, `/auth/invite`, and `/auth/:provider`.
+- `/auth/invite` (`lib/wagger_web/controllers/auth_controller.ex:107`) requires
+  both a `:pending_oauth` session and a valid invite code. Invite codes are
+  minted by an admin, and no admin exists.
+
+The only way in is `Wagger.Accounts.create_user/1` plus
+`Wagger.Accounts.set_password/2` from a remote console — which is how the
+2026-08-11 Fly deploy was bootstrapped.
+
+### Why it happens
+
+The setup-mode escape hatch was only ever wired to the API. `Plugs.Authenticate`
+(`lib/wagger_web/plugs/authenticate.ex:69`) checks
+`Accounts.setup_required?/0` and, when the users table is empty, assigns
+`setup_mode: true` and lets the request through unauthenticated.
+
+The browser pipeline has no equivalent. `Plugs.RequireUser`
+(`lib/wagger_web/plugs/require_user.ex`) redirects to `/login` whenever
+`:current_user` is nil, with no reference to `setup_required?/0`. Auth was built
+against a development database that already contained the `admin` row, so the
+empty-database case never surfaced locally.
+
+### What should change
+
+Give the browser a first-run path gated on `Accounts.setup_required?/0`, so the
+gate closes permanently the moment the first user exists. Two candidates, not
+yet decided:
+
+1. A `/setup` route that renders a create-admin form when
+   `setup_required?/0` is true and 404s or redirects to `/login` otherwise.
+2. A boot-time seed in the supervision tree that creates the admin from
+   `ADMIN_EMAIL` / `ADMIN_PASSWORD` when the users table is empty. No UI, but it
+   puts a plaintext password in the environment.
+
+Either way the check must be `setup_required?/0` — a count of zero users — and
+not a config flag someone can forget to turn off. Note that `set_password/2`
+enforces a 12-character minimum, and `create_user/1` infers its attribute-key
+type from the first key in the map, so any bootstrap code must pass uniformly
+string-keyed or atom-keyed attributes.
+
+## MCP download route is public and its "one-shot" token is replayable
+
+**Filed:** 2026-08-04
+**Reported from:** as-built architecture review
+
+### Symptom
+
+`lib/wagger_web/router.ex:40` places the download route in the public scope:
+
+```elixir
+# --- Public surface ---
+scope "/", WaggerWeb do
+  pipe_through :browser
+
+  get "/login", SessionController, :new
+  ...
+  get "/mcp/download/:token", McpDownloadController, :show
+end
+```
+
+The `:authenticated` pipeline (`router.ex:15-17`, `WaggerWeb.Plugs.RequireUser`)
+is not applied. The only thing standing between an anonymous request and the
+YANG payload is `Phoenix.Token.verify/4` at
+`lib/wagger_web/controllers/mcp_download_controller.ex:13`, with
+`@salt "mcp-download"` and `@max_age 300`.
+
+The moduledoc on that controller says "one-shot download". It is not one-shot.
+`Phoenix.Token.verify/4` is stateless; nothing records that a token has been
+redeemed, and `grep -rn '"mcp-download"' lib` returns exactly two sites — the
+`Phoenix.Token.sign` at `lib/wagger_web/live/mcp_generator_live.ex:29` and the
+`verify` above. The same URL can be replayed any number of times for the full
+five minutes.
+
+The token also carries the payload itself — `%{yang_text: ..., filename: ...}`
+is signed into the token, not looked up from a store keyed by the requesting
+user — so the URL is a bearer capability for the document, not a reference the
+server can revoke or scope.
+
+### Why it happens
+
+The download is a capability URL by design: `/mcp` is behind auth
+(`router.ex:56`, inside the `:authenticated` scope), the LiveView signs a token
+for the user, and the browser follows the link. Putting the route behind
+`RequireUser` would work — the link is followed by an already-logged-in
+browser — but the route was placed in the public scope instead, so the token is
+doing all the work.
+
+### What should change
+
+Two things need deciding, separately:
+
+1. Whether the route belongs behind `:authenticated`. It appears to cost
+   nothing: the only issuer is an authenticated LiveView. Moving it removes the
+   anonymous surface entirely.
+2. Whether "one-shot" should be made true or the moduledoc corrected. Single-use
+   requires server-side state (an ETS table or a DB row keyed by token digest).
+   If that is not wanted, drop the phrase — a five-minute replayable bearer URL
+   is a defensible design, but the code should say so.
+
+---
+
+## Wagger.Generator.Mcp is in no provider map and in no documentation
+
+**Filed:** 2026-08-04
+**Reported from:** as-built architecture review
+
+### Symptom
+
+Eleven modules declare `@behaviour Wagger.Generator`:
+
+```text
+lib/wagger/generator/apache.ex:13       lib/wagger/generator/gcp.ex:43
+lib/wagger/generator/aws.ex:15          lib/wagger/generator/gcp_urlmap.ex:63
+lib/wagger/generator/azure.ex:38        lib/wagger/generator/mcp.ex:13
+lib/wagger/generator/caddy.ex:11        lib/wagger/generator/nginx.ex:11
+lib/wagger/generator/cloudflare.ex:31   lib/wagger/generator/zap.ex:11
+lib/wagger/generator/coraza.ex:15
+```
+
+`Wagger.Generator.Mcp` appears in none of the three provider maps
+(`generate_controller.ex:24-38`, `app_detail_live.ex:207-220`,
+`hub_detail_live.ex:44-57`), so no `POST /api/applications/:id/generate/mcp`
+route resolves and it appears in no provider dropdown. It is reached only by
+`lib/wagger_web/live/mcp_generator_live.ex:24`, which calls
+`Wagger.Generator.Mcp.generate_from_yang(source, app_name)` directly, bypassing
+provider dispatch entirely.
+
+`grep -ni mcp README.md` returns nothing. The generator is undocumented.
+
+### Why it happens
+
+MCP took a different input shape — annotated YANG text pasted into a form,
+rather than an `%Application{}` with routes — so it got its own LiveView and its
+own call path instead of a provider-map entry. The Parking Lot entry at the
+bottom of this file records the blocker for wiring it per-app.
+
+### What should change
+
+Decide whether `Wagger.Generator.Mcp` should carry `@behaviour Wagger.Generator`
+at all. If it cannot be dispatched like the others because its input is not an
+application, the behaviour attribute is asserting an interchangeability that
+does not hold, and the honest move is to drop it and document MCP as a separate
+tool. If it should be dispatchable, the annotation-source question in the
+Parking Lot has to be settled first. Either way, `/mcp` needs a mention in the
+README — a shipping feature currently documented nowhere.
+
+---
+
+## README undercounts the generators and omits two of them
+
+**Filed:** 2026-08-04
+**Reported from:** as-built architecture review
+
+### Symptom
+
+`README.md:5`:
+
+> Nine generators ship today -- AWS WAF, Cloudflare, Azure Front Door, GCP Cloud
+> Armor, Nginx, Caddy, Apache (mod_security2), Coraza/ModSecurity, and an OWASP
+> ZAP test plan generator [...]
+
+Eleven modules carry `@behaviour Wagger.Generator` (list above). The nine-key
+provider map covers ten of them, because `"gcp"` bundles `Gcp` and `GcpUrlMap`
+through `Wagger.Generator.Multi` — README:11-15 does explain the two GCP
+artifacts, so the count is defensible there. `Wagger.Generator.Mcp` is the
+eleventh and is absent from both the count and the prose.
+
+### What should change
+
+Restate the line in terms of what a user can select rather than a module count,
+and add MCP. The GCP two-artifact explanation at README:11 is already correct
+and should stay.
+
+---
+
+## Two generators are not independently selectable
+
+**Filed:** 2026-08-04
+**Reported from:** as-built architecture review
+
+### Symptom
+
+`Wagger.Generator.GcpUrlMap` appears in the provider maps only inside the `"gcp"`
+list value:
+
+```elixir
+"gcp" => [
+  {"Cloud Armor", Wagger.Generator.Gcp, "gcp-armor.json"},
+  {"URL Map", Wagger.Generator.GcpUrlMap, "gcp-urlmap.json"}
+],
+```
+
+There is no `"gcp_urlmap"` key in `generate_controller.ex`,
+`app_detail_live.ex`, or `hub_detail_live.ex`, so a caller who wants only the
+URL Map fragment cannot ask for it. `Wagger.Generator.Mcp` has the inverse
+problem — reachable only through `McpGeneratorLive`, never through provider
+dispatch.
+
+### Why it happens
+
+For GCP this is deliberate: `gcp.ex:8` and README:11-13 describe URL Map and
+Cloud Armor as two halves of one deployment, and emitting them together is the
+correct default. The gap is that "together" is the only option.
+
+### What should change
+
+Confirm whether URL-Map-only is a real use case. README:15 says Classic ALB
+users should use Cloud Armor alone — which is also not independently selectable,
+since `"gcp"` always emits both. If either half alone is legitimate, the map
+needs keys for them; if not, the README should say the pair is indivisible.
+
+---
+
+## The provider map is triplicated with nothing keeping the copies in sync
+
+**Filed:** 2026-08-04
+**Reported from:** as-built architecture review
+
+### Symptom
+
+The same nine-key map is defined three times:
+
+- `lib/wagger_web/controllers/generate_controller.ex:24` — `@providers`
+- `lib/wagger_web/live/app_detail_live.ex:207` — `@provider_modules`
+- `lib/wagger_web/live/hub_detail_live.ex:44` — `@provider_modules`
+
+The keys and values are identical today, including the nested `"gcp"` list. The
+adjacent `@provider_config_fields` maps in the two LiveViews are likewise
+duplicated. All three are module attributes resolved at compile time; no test,
+no macro, and no shared module ties them together.
+
+### Why it happens
+
+Each surface grew its own copy rather than a common one being extracted.
+
+### What should change
+
+Hoist one canonical map into a module the three call — `Wagger.Generator` itself
+is the obvious home, alongside the behaviour definition. Field metadata
+(`@provider_config_fields`) belongs with it, or on the generator modules as a
+callback.
+
+---
 
 -[x] On the /application page, the "Copy" button in each generated config text area does not function as intended. When clicked, it should copy the content of the respective text area to the clipboard, but currently, it does not perform this action. This issue needs to be addressed to enhance user experience and functionality on the application page.
   - Fix: assets/js/app.js — added secure-context check, execCommand fallback for non-HTTPS, and visible "Copied!"/"Copy failed" feedback on the button.
