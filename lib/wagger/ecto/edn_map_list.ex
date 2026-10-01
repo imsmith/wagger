@@ -63,11 +63,11 @@ defmodule Wagger.Ecto.EdnMapList do
   def load(nil), do: {:ok, []}
 
   def load(edn) when is_binary(edn) do
-    case Eden.decode(edn) do
+    case EDN.decode(edn) do
       {:ok, array} ->
         maps =
           array
-          |> Array.to_list()
+          |> EDN.Vector.to_list()
           |> Enum.map(&decode_map/1)
 
         {:ok, maps}
@@ -91,8 +91,8 @@ defmodule Wagger.Ecto.EdnMapList do
     "\"#{escaped}\""
   end
 
-  # Converts an eden-decoded map (atom keys) to a string-keyed Elixir map.
-  # Eden decodes EDN maps with keyword keys as atom keys.
+  # Converts an EDN-decoded map (atom keys) to a string-keyed Elixir map.
+  # EDN.decode/1 decodes EDN maps with keyword keys as atom keys.
   defp decode_map(map) when is_map(map) do
     Map.new(map, fn
       {k, v} when is_atom(k) -> {Atom.to_string(k), decode_value(v)}
@@ -100,7 +100,7 @@ defmodule Wagger.Ecto.EdnMapList do
     end)
   end
 
-  # Converts eden-decoded values to typed Elixir values.
+  # Converts EDN-decoded values to typed Elixir values.
   defp decode_value(nil), do: nil
   defp decode_value(true), do: true
   defp decode_value(false), do: false

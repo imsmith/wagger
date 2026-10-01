@@ -44,11 +44,11 @@ defmodule Wagger.Ecto.EdnList do
   def load(nil), do: {:ok, []}
 
   def load(edn) when is_binary(edn) do
-    case Eden.decode(edn) do
+    case EDN.decode(edn) do
       {:ok, array} ->
         items =
           array
-          |> Array.to_list()
+          |> EDN.Vector.to_list()
           |> Enum.map(fn
             atom when is_atom(atom) -> Atom.to_string(atom)
             str when is_binary(str) -> str

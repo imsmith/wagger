@@ -65,7 +65,7 @@ defmodule Wagger.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      {:eden, "~> 2.1"},
+      {:ex_edn, path: "../ex_edn"},
       {:gettext, "~> 1.0", override: true},
       {:ex_yang, git: "https://github.com/imsmith/ex_yang.git", branch: "main"},
       {:busybody, path: "../busybody", only: :dev},
