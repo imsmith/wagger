@@ -55,6 +55,34 @@ defmodule Wagger.Accounts do
 
   def setup_required?, do: Repo.aggregate(User, :count, :id) == 0
 
+  @doc """
+  First-run seed, called from the supervision tree after migrations.
+
+  When the users table is empty and both `:bootstrap_admin_email` and
+  `:bootstrap_admin_password` are configured (from `WAGGER_BOOTSTRAP_ADMIN_EMAIL`
+  and `WAGGER_BOOTSTRAP_ADMIN_PASSWORD`), creates that admin with a local
+  password so a fresh deployment can be signed into. Gated on
+  `setup_required?/0`, so it closes permanently once any user exists.
+  Returns `{:ok, user}`, `{:error, changeset}`, or `:noop`.
+  """
+  def bootstrap_admin do
+    email = Application.get_env(:wagger, :bootstrap_admin_email)
+    password = Application.get_env(:wagger, :bootstrap_admin_password)
+
+    if is_binary(email) and is_binary(password) and setup_required?() do
+      Repo.transaction(fn ->
+        with {:ok, user} <- register_oauth_user(%{"email" => email, "role" => "admin"}),
+             {:ok, user} <- set_password(user, password) do
+          user
+        else
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+    else
+      :noop
+    end
+  end
+
   # ----- new functions for OAuth + password auth -----
 
   @doc """

@@ -43,12 +43,17 @@ Either way, open [localhost:4000](http://localhost:4000).
 ## Authentication
 
 The browser/LiveView surface is gated behind login. Users sign in via
-Google OAuth, GitHub OAuth, or local password (after first OAuth login).
-First-time access is bootstrapped via `WAGGER_BOOTSTRAP_ADMIN_EMAIL`:
-the OAuth login matching this email is auto-promoted to admin and
-bypasses the invite-code gate.
+Google OAuth, GitHub OAuth, or local password.
 
-> **Important:** unset `WAGGER_BOOTSTRAP_ADMIN_EMAIL` on the deploy after the first admin signs in. Leaving it set means any OAuth identity matching that email becomes admin on a fresh sign-in.
+A fresh database has no users and no sign-up page, so the first admin is
+seeded from the environment. Set `WAGGER_BOOTSTRAP_ADMIN_EMAIL` and
+`WAGGER_BOOTSTRAP_ADMIN_PASSWORD` (12 characters minimum) before first boot;
+the admin is created with that local password while the users table is empty
+and the seed is a no-op forever after. If only the email is set, the OAuth
+login matching it is promoted to admin and bypasses the invite-code gate
+instead.
+
+> **Important:** unset both variables on the deploy after the first admin signs in. Leaving the email set means any OAuth identity matching it becomes admin on a fresh sign-in.
 
 OAuth provider credentials live encrypted in the database (via
 `Wagger.Secrets`). For first-time bootstrap, set the env vars

@@ -49,6 +49,42 @@ defmodule Wagger.AccountsTest do
     end
   end
 
+  describe "bootstrap_admin/0" do
+    setup do
+      Application.put_env(:wagger, :bootstrap_admin_email, "boot@x.com")
+      Application.put_env(:wagger, :bootstrap_admin_password, "correct-horse-battery")
+
+      on_exit(fn ->
+        Application.delete_env(:wagger, :bootstrap_admin_email)
+        Application.delete_env(:wagger, :bootstrap_admin_password)
+      end)
+    end
+
+    test "seeds an admin with a working password into an empty database" do
+      assert {:ok, %User{role: "admin", email: "boot@x.com"}} = Accounts.bootstrap_admin()
+      assert {:ok, _} = Accounts.authenticate_by_password("boot@x.com", "correct-horse-battery")
+      assert Accounts.bootstrap_admin() == :noop
+    end
+
+    test "is a no-op once any user exists" do
+      {:ok, _, _} = Accounts.create_user(%{"username" => "existing"})
+      assert Accounts.bootstrap_admin() == :noop
+      refute Repo.get_by(User, email: "boot@x.com")
+    end
+
+    test "is a no-op without a configured password" do
+      Application.delete_env(:wagger, :bootstrap_admin_password)
+      assert Accounts.bootstrap_admin() == :noop
+      assert Accounts.setup_required?()
+    end
+
+    test "rolls back the user when the password is too short" do
+      Application.put_env(:wagger, :bootstrap_admin_password, "short")
+      assert {:error, %Ecto.Changeset{}} = Accounts.bootstrap_admin()
+      assert Accounts.setup_required?()
+    end
+  end
+
   describe "setup_required?/0" do
     test "returns true when no users exist" do
       assert Accounts.setup_required?() == true

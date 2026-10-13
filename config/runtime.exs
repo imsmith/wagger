@@ -98,3 +98,9 @@ end
 if email = System.get_env("WAGGER_BOOTSTRAP_ADMIN_EMAIL") do
   config :wagger, :bootstrap_admin_email, email
 end
+
+# With the email above, seeds the first admin (local password) into an empty
+# database at boot. Ignored once any user exists. Unset both after first login.
+if password = System.get_env("WAGGER_BOOTSTRAP_ADMIN_PASSWORD") do
+  config :wagger, :bootstrap_admin_password, password
+end

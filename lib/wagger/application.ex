@@ -5,6 +5,8 @@ defmodule Wagger.Application do
 
   use Application
 
+  require Logger
+
   @impl true
   def start(_type, _args) do
     children = [
@@ -15,6 +17,7 @@ defmodule Wagger.Application do
       {DNSCluster, query: Application.get_env(:wagger, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Wagger.PubSub},
       {Task, fn -> Wagger.OauthCredentials.load_into_app_env() end},
+      Supervisor.child_spec({Task, &bootstrap_admin/0}, id: :bootstrap_admin),
       # Start a worker by calling: Wagger.Worker.start_link(arg)
       # {Wagger.Worker, arg},
       # Start to serve requests, typically the last entry
@@ -38,6 +41,14 @@ defmodule Wagger.Application do
   def config_change(changed, _new, removed) do
     WaggerWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  defp bootstrap_admin do
+    case Wagger.Accounts.bootstrap_admin() do
+      {:ok, user} -> Logger.info("bootstrap: created admin #{user.email}")
+      {:error, changeset} -> Logger.error("bootstrap: admin not created: #{inspect(changeset.errors)}")
+      :noop -> :ok
+    end
   end
 
   defp skip_migrations?() do
