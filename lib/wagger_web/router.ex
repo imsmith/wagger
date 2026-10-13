@@ -37,12 +37,13 @@ defmodule WaggerWeb.Router do
     post "/auth/invite", AuthController, :invite_submit
     get "/auth/:provider", AuthController, :request
     get "/auth/:provider/callback", AuthController, :callback
-    get "/mcp/download/:token", McpDownloadController, :show
   end
 
   # --- Authenticated browser/LiveView ---
   scope "/", WaggerWeb do
     pipe_through [:browser, :authenticated]
+
+    get "/mcp/download/:token", McpDownloadController, :show
 
     live_session :default,
       on_mount: [

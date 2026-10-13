@@ -4,6 +4,14 @@ defmodule WaggerWeb.McpDownloadControllerTest do
 
   @salt "mcp-download"
 
+  setup %{conn: conn}, do: %{conn: log_in_as_user(conn)}
+
+  test "anonymous request is redirected to login", %{conn: conn} do
+    token = Phoenix.Token.sign(WaggerWeb.Endpoint, @salt, %{yang_text: "x", filename: "x.yang"})
+    conn = build_conn() |> get(~p"/mcp/download/#{token}")
+    assert redirected_to(conn) == "/login"
+  end
+
   test "valid token returns YANG body with attachment header", %{conn: conn} do
     payload = %{yang_text: "module x {}", filename: "x-mcp.yang"}
     token = Phoenix.Token.sign(WaggerWeb.Endpoint, @salt, payload)
