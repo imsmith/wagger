@@ -2,7 +2,7 @@
 
 Your application has a finite set of valid endpoints. Your WAF should know about them. Wagger bridges the gap: define your routes once, generate WAF configs for whatever platform you're deploying to.
 
-Nine generators ship today -- AWS WAF, Cloudflare, Azure Front Door, GCP Cloud Armor, Nginx, Caddy, Apache (mod_security2), Coraza/ModSecurity, and an OWASP ZAP test plan generator that verifies your deployed config is actually blocking what it should.
+From one route table you can select nine outputs: eight WAF configs -- AWS WAF, Cloudflare, Azure Front Door, GCP (Cloud Armor plus URL Map, emitted together), Nginx, Caddy, Apache (mod_security2), Coraza/ModSecurity -- and an OWASP ZAP test plan that verifies your deployed config is actually blocking what it should. A tenth generator, MCP, takes annotated YANG instead of a route table and lives on its own page; see below.
 
 Import routes from OpenAPI specs, bulk text, or access logs. Share API definitions through the public Hub. Get notified when your routes drift from the last generated config.
 
@@ -13,6 +13,12 @@ Wagger emits two artifacts for GCP: `gcp-armor.json` (Cloud Armor security polic
 Deployment sketch: URL Map attaches to the Global External HTTPS Load Balancer; Cloud Armor attaches to the known-traffic `backendServices` referenced by the URL Map's matched routeRules. The deployer provides a deny backend (a small Cloud Run service or serverless NEG returning 403) referenced by the URL Map's `defaultService` and `pathMatchers[].defaultService` and the URL Map's final default-deny route-rule's `service`. Wagger emits placeholders `__KNOWN_TRAFFIC_BACKEND__` and `__DENY_BACKEND__` (overridable via config) which the deployer substitutes for real `projects/PROJECT_ID/.../backendServices/...` refs.
 
 Targets Global External Application Load Balancer and other modern ALB variants where `pathTemplateMatch` is supported. Classic ALB is unsupported by `Wagger.Generator.GcpUrlMap` because `pathTemplateMatch` is unavailable there; users on Classic ALB can use `Wagger.Generator.Gcp` (Cloud Armor) alone, but with much tighter scaling limits on the path allowlist.
+
+The `gcp` provider always emits both artifacts in one output, separated by labelled `====` headers naming each file. There is no URL-Map-only or Cloud-Armor-only selection: the two are designed as halves of one deployment, and splitting the output at the header is trivial for anyone who needs just one.
+
+## MCP
+
+`/mcp` generates a Model Context Protocol module from YANG you paste in. Annotate your service's YANG with `wagger-mcp:*` extensions (see `yang/wagger-mcp-extensions.yang`), submit, and wagger returns a derivation report, the generated `<app>-mcp.yang` importing the canonical `yang/mcp.yang`, and a download link. The generator (`Wagger.Generator.Mcp`) implements the same `Wagger.Generator` behaviour as the WAF providers via the `map_capabilities/2` callback, but because its input is annotated YANG rather than a stored application's routes it is not in the per-application provider list. Wiring it per-application is blocked on deciding where those annotations live; see the Parking Lot in `ISSUES.md`.
 
 For the full story -- why the architecture looks the way it does, how the generators work under the hood, and what the YANG validation layer is about -- read the [literate program](docs/waf-rule-generator-literate.md).
 

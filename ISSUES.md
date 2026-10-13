@@ -6,6 +6,7 @@ Newest first.
 
 **Filed:** 2026-08-11
 **Reported from:** first Fly.io deploy
+**Resolved:** 2026-10-12 — option 2. `Wagger.Accounts.bootstrap_admin/0` runs from the supervision tree after migrations and seeds an admin with a local password from `WAGGER_BOOTSTRAP_ADMIN_EMAIL` + `WAGGER_BOOTSTRAP_ADMIN_PASSWORD` while `setup_required?/0` is true. Transactional, so a short password leaves no half-made user. README updated. Note: the API-side `allow_setup` escape hatch in `Plugs.Authenticate` is still wired to nothing in the router (left in place, flagged).
 
 ### Symptom
 
@@ -60,6 +61,7 @@ string-keyed or atom-keyed attributes.
 
 **Filed:** 2026-08-04
 **Reported from:** as-built architecture review
+**Resolved:** 2026-10-12 — route moved into the `[:browser, :authenticated]` scope; moduledoc now states the token is a stateless five-minute bearer, not single-use. Test added for the anonymous redirect.
 
 ### Symptom
 
@@ -121,6 +123,7 @@ Two things need deciding, separately:
 
 **Filed:** 2026-08-04
 **Reported from:** as-built architecture review
+**Resolved:** 2026-10-12 — the behaviour attribute stays. `Wagger.Generator.generate/3` dispatches on `map_capabilities/2` and the MCP tests exercise exactly that path, so the interchangeability is real at the orchestrator level; what MCP lacks is an `%Application{}` input, which is why it is absent from the per-app provider list. README gained an MCP section saying so. Per-app wiring remains in the Parking Lot.
 
 ### Symptom
 
@@ -168,6 +171,7 @@ README — a shipping feature currently documented nowhere.
 
 **Filed:** 2026-08-04
 **Reported from:** as-built architecture review
+**Resolved:** 2026-10-12 — README line restated as nine selectable outputs plus MCP; GCP two-artifact note kept.
 
 ### Symptom
 
@@ -195,6 +199,7 @@ and should stay.
 
 **Filed:** 2026-08-04
 **Reported from:** as-built architecture review
+**Resolved:** 2026-10-12 — decided the pair is indivisible. README now says `gcp` always emits both artifacts and that the `====` separator headers make splitting trivial. No new provider keys. Revisit if a Classic ALB user actually asks.
 
 ### Symptom
 
@@ -233,6 +238,7 @@ needs keys for them; if not, the README should say the pair is indivisible.
 
 **Filed:** 2026-08-04
 **Reported from:** as-built architecture review
+**Resolved:** 2026-10-12 — hoisted into `Wagger.Generator` (`providers/0`, `provider_names/0`, `fetch_provider/1`, `buckets/0`, `config_fields/1`). GenerateController, AppDetailLive, HubDetailLive and DashboardLive read from it. `test/wagger/generator/registry_test.exs` asserts buckets cover every provider exactly once.
 
 ### Symptom
 
