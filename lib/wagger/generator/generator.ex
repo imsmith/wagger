@@ -35,6 +35,86 @@ defmodule Wagger.Generator do
 
   @optional_callbacks map_capabilities: 2, map_routes: 2, serialize: 2
 
+  # ---------------------------------------------------------------------------
+  # Provider registry — the single source of truth for which providers a user
+  # can select, how they are grouped in the UI, and which config fields each
+  # takes. GenerateController, AppDetailLive, HubDetailLive and DashboardLive
+  # all read from here.
+  # ---------------------------------------------------------------------------
+
+  @providers %{
+    "apache" => Wagger.Generator.Apache,
+    "nginx" => Wagger.Generator.Nginx,
+    "aws" => Wagger.Generator.Aws,
+    "cloudflare" => Wagger.Generator.Cloudflare,
+    "azure" => Wagger.Generator.Azure,
+    "gcp" => [
+      {"Cloud Armor", Wagger.Generator.Gcp, "gcp-armor.json"},
+      {"URL Map", Wagger.Generator.GcpUrlMap, "gcp-urlmap.json"}
+    ],
+    "caddy" => Wagger.Generator.Caddy,
+    "coraza" => Wagger.Generator.Coraza,
+    "zap" => Wagger.Generator.Zap
+  }
+
+  # UI grouping. Each tuple is {bucket_label, providers_in_order}. An empty
+  # bucket renders a "(none yet)" hint.
+  @buckets [
+    {"Ingress Configs", ~w(apache aws azure caddy cloudflare coraza gcp nginx)},
+    {"Egress Configs", []},
+    {"Tools", ~w(zap)}
+  ]
+
+  @config_fields %{
+    "nginx" => [{"prefix", "Name prefix", :text}, {"upstream", "Upstream URL", :text}],
+    "caddy" => [{"prefix", "Name prefix", :text}, {"upstream", "Upstream URL", :text}],
+    "aws" => [{"prefix", "Name prefix", :text}, {"scope", "REGIONAL or CLOUDFRONT", :text}],
+    "cloudflare" => [{"prefix", "Name prefix", :text}],
+    "azure" => [{"prefix", "Name prefix", :text}, {"mode", "Prevention or Detection", :text}],
+    "gcp" => [
+      {"prefix", "Name prefix", :text},
+      {"allow_ip_ranges", "Allowed source IP ranges (one CIDR per line)", :textarea},
+      {"allow_regions", "Allowed source regions (one ISO code per line, e.g. US, GB)", :textarea},
+      {"known_traffic_backend", "Known-traffic backend ref (URL Map)", :text},
+      {"deny_backend", "Deny backend ref (URL Map)", :text}
+    ],
+    "coraza" => [
+      {"prefix", "Name prefix", :text},
+      {"start_rule_id", "Starting rule ID (default 100001)", :text}
+    ],
+    "apache" => [
+      {"prefix", "Name prefix", :text},
+      {"start_rule_id", "Starting rule ID (default 100001)", :text},
+      {"audit_log_path", "Audit log path (default /var/log/apache2/modsec_audit.log)", :text},
+      {"tmp_dir", "SecTmpDir (default /tmp)", :text},
+      {"data_dir", "SecDataDir (default /var/cache/modsecurity)", :text}
+    ],
+    "zap" => [
+      {"prefix", "Name prefix", :text},
+      {"target_url", "Target URL (or {{TARGET_URL}})", :text}
+    ]
+  }
+
+  @doc "Provider name → generator module, or a list of `{label, module, filename}` for multi-artifact providers."
+  @spec providers() :: %{String.t() => module() | [{String.t(), module(), String.t()}]}
+  def providers, do: @providers
+
+  @doc "Sorted list of selectable provider names."
+  @spec provider_names() :: [String.t()]
+  def provider_names, do: @providers |> Map.keys() |> Enum.sort()
+
+  @doc "Fetches the generator spec for a provider name."
+  @spec fetch_provider(String.t()) :: {:ok, module() | list()} | :error
+  def fetch_provider(name), do: Map.fetch(@providers, name)
+
+  @doc "UI buckets as `{label, [provider_name]}` tuples."
+  @spec buckets() :: [{String.t(), [String.t()]}]
+  def buckets, do: @buckets
+
+  @doc "Config form fields for a provider as `{param, label, input_type}` tuples."
+  @spec config_fields(String.t()) :: [{String.t(), String.t(), :text | :textarea}]
+  def config_fields(name), do: Map.get(@config_fields, name, [])
+
   @doc """
   Generates WAF configuration for the given provider module.
 

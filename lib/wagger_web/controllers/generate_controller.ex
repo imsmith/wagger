@@ -21,26 +21,12 @@ defmodule WaggerWeb.GenerateController do
 
   action_fallback WaggerWeb.FallbackController
 
-  @providers %{
-    "apache" => Wagger.Generator.Apache,
-    "nginx" => Wagger.Generator.Nginx,
-    "aws" => Wagger.Generator.Aws,
-    "cloudflare" => Wagger.Generator.Cloudflare,
-    "azure" => Wagger.Generator.Azure,
-    "gcp" => [
-      {"Cloud Armor", Wagger.Generator.Gcp, "gcp-armor.json"},
-      {"URL Map", Wagger.Generator.GcpUrlMap, "gcp-urlmap.json"}
-    ],
-    "caddy" => Wagger.Generator.Caddy,
-    "coraza" => Wagger.Generator.Coraza,
-    "zap" => Wagger.Generator.Zap
-  }
 
   @doc "Generates WAF config for the given application and provider, stores a snapshot."
   def create(conn, %{"application_id" => app_id, "provider" => provider} = params) do
     config = Map.drop(params, ["application_id", "provider"])
 
-    case Map.fetch(@providers, provider) do
+    case Generator.fetch_provider(provider) do
       :error ->
         err = Comn.Errors.Registry.error!("wagger.generator/unknown_provider",
           message: "Unknown provider: #{provider}",

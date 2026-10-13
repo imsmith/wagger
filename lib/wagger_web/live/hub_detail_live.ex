@@ -29,62 +29,11 @@ defmodule WaggerWeb.HubDetailLive do
       config_field_key_label: 1
     ]
 
-  @providers ~w(apache aws azure caddy cloudflare coraza gcp nginx zap)
-
-  # UI grouping for the Generate Config provider buttons. Mirrors AppDetailLive.
-  @buckets [
-    {"Ingress Configs", ~w(apache aws azure caddy cloudflare coraza gcp nginx)},
-    {"Egress Configs", []},
-    {"Tools", ~w(zap)}
-  ]
+  @providers Generator.provider_names()
 
   @doc false
-  def buckets, do: @buckets
+  def buckets, do: Generator.buckets()
 
-  @provider_modules %{
-    "apache" => Wagger.Generator.Apache,
-    "nginx" => Wagger.Generator.Nginx,
-    "aws" => Wagger.Generator.Aws,
-    "cloudflare" => Wagger.Generator.Cloudflare,
-    "azure" => Wagger.Generator.Azure,
-    "gcp" => [
-      {"Cloud Armor", Wagger.Generator.Gcp, "gcp-armor.json"},
-      {"URL Map", Wagger.Generator.GcpUrlMap, "gcp-urlmap.json"}
-    ],
-    "caddy" => Wagger.Generator.Caddy,
-    "coraza" => Wagger.Generator.Coraza,
-    "zap" => Wagger.Generator.Zap
-  }
-
-  @provider_config_fields %{
-    "nginx" => [{"prefix", "Name prefix", :text}, {"upstream", "Upstream URL", :text}],
-    "caddy" => [{"prefix", "Name prefix", :text}, {"upstream", "Upstream URL", :text}],
-    "aws" => [{"prefix", "Name prefix", :text}, {"scope", "REGIONAL or CLOUDFRONT", :text}],
-    "cloudflare" => [{"prefix", "Name prefix", :text}],
-    "azure" => [{"prefix", "Name prefix", :text}, {"mode", "Prevention or Detection", :text}],
-    "gcp" => [
-      {"prefix", "Name prefix", :text},
-      {"allow_ip_ranges", "Allowed source IP ranges (one CIDR per line)", :textarea},
-      {"allow_regions", "Allowed source regions (one ISO code per line, e.g. US, GB)", :textarea},
-      {"known_traffic_backend", "Known-traffic backend ref (URL Map)", :text},
-      {"deny_backend", "Deny backend ref (URL Map)", :text}
-    ],
-    "coraza" => [
-      {"prefix", "Name prefix", :text},
-      {"start_rule_id", "Starting rule ID (default 100001)", :text}
-    ],
-    "apache" => [
-      {"prefix", "Name prefix", :text},
-      {"start_rule_id", "Starting rule ID (default 100001)", :text},
-      {"audit_log_path", "Audit log path (default /var/log/apache2/modsec_audit.log)", :text},
-      {"tmp_dir", "SecTmpDir (default /tmp)", :text},
-      {"data_dir", "SecDataDir (default /var/cache/modsecurity)", :text}
-    ],
-    "zap" => [
-      {"prefix", "Name prefix", :text},
-      {"target_url", "Target URL (or {{TARGET_URL}})", :text}
-    ]
-  }
 
   @impl true
   def mount(%{"name" => name}, _session, socket) do
@@ -160,7 +109,7 @@ defmodule WaggerWeb.HubDetailLive do
   def handle_event("generate", params, socket) do
     app = socket.assigns.app
     provider = socket.assigns.selected_provider
-    provider_spec = Map.fetch!(@provider_modules, provider)
+    provider_spec = Map.fetch!(Generator.providers(), provider)
     routes = socket.assigns.routes
     route_data = Drift.normalize_for_snapshot(routes)
 
@@ -200,7 +149,7 @@ defmodule WaggerWeb.HubDetailLive do
   # -- Helpers --
 
   @doc "Returns provider-specific configuration field definitions for the generate form."
-  def config_fields_for(provider), do: Map.get(@provider_config_fields, provider, [])
+  def config_fields_for(provider), do: Generator.config_fields(provider)
 
   @doc "Splits a combined multi-artifact snapshot output into labeled sections."
   def split_snapshot_output(nil), do: [{nil, nil, ""}]
