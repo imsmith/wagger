@@ -40,7 +40,16 @@ defmodule Wagger.Snapshots.Snapshot do
   """
   def changeset(snapshot, attrs) do
     snapshot
-    |> cast(attrs, [:application_id, :provider, :config_params, :route_snapshot, :output, :checksum, :request_id, :generated_by])
+    |> cast(attrs, [
+      :application_id,
+      :provider,
+      :config_params,
+      :route_snapshot,
+      :output,
+      :checksum,
+      :request_id,
+      :generated_by
+    ])
     |> validate_required([:application_id, :provider, :route_snapshot, :output, :checksum])
   end
 end

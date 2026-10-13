@@ -7,10 +7,34 @@ defmodule Wagger.Generator.NginxTest do
   alias Wagger.Generator.Nginx
 
   @routes [
-    %{path: "/api/users", methods: ["GET", "POST"], path_type: "exact", rate_limit: 100, description: "Users"},
-    %{path: "/api/users/{id}", methods: ["GET", "PUT", "DELETE"], path_type: "exact", rate_limit: nil, description: "User detail"},
-    %{path: "/static/", methods: ["GET"], path_type: "prefix", rate_limit: nil, description: "Static"},
-    %{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil, description: "Health"}
+    %{
+      path: "/api/users",
+      methods: ["GET", "POST"],
+      path_type: "exact",
+      rate_limit: 100,
+      description: "Users"
+    },
+    %{
+      path: "/api/users/{id}",
+      methods: ["GET", "PUT", "DELETE"],
+      path_type: "exact",
+      rate_limit: nil,
+      description: "User detail"
+    },
+    %{
+      path: "/static/",
+      methods: ["GET"],
+      path_type: "prefix",
+      rate_limit: nil,
+      description: "Static"
+    },
+    %{
+      path: "/health",
+      methods: ["GET"],
+      path_type: "exact",
+      rate_limit: nil,
+      description: "Health"
+    }
   ]
 
   @config %{prefix: "myapp", upstream: "http://backend:8080"}

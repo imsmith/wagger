@@ -23,6 +23,12 @@ defmodule WaggerWeb.FallbackController do
 
     conn
     |> put_status(status)
-    |> json(%{error: err.message, code: err.code, reason: err.reason, field: err.field, suggestion: err.suggestion})
+    |> json(%{
+      error: err.message,
+      code: err.code,
+      reason: err.reason,
+      field: err.field,
+      suggestion: err.suggestion
+    })
   end
 end

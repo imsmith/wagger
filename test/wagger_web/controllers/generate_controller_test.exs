@@ -76,7 +76,8 @@ defmodule WaggerWeb.GenerateControllerTest do
 
   describe "create — cloudflare" do
     test "returns provider cloudflare in response", %{conn: conn, app: app} do
-      conn = post(conn, ~p"/api/applications/#{app.id}/generate/cloudflare", %{"prefix" => "test"})
+      conn =
+        post(conn, ~p"/api/applications/#{app.id}/generate/cloudflare", %{"prefix" => "test"})
 
       assert %{
                "provider" => "cloudflare",

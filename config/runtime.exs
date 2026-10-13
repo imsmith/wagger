@@ -20,8 +20,7 @@ if System.get_env("PHX_SERVER") do
   config :wagger, WaggerWeb.Endpoint, server: true
 end
 
-config :wagger, WaggerWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "0"))]
+config :wagger, WaggerWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "0"))]
 
 if config_env() == :prod do
   database_path =

@@ -9,7 +9,7 @@
         phx-click="toggle_new_app"
         class={"text-sm px-3 py-1 rounded cursor-pointer transition-colors #{if @show_new_app, do: "bg-base-300 text-[color:var(--tn-text-muted)]", else: "bg-primary text-primary-content font-semibold hover:opacity-90"}"}
       >
-        <%= if @show_new_app, do: "Cancel", else: "+ New Application" %>
+        {if @show_new_app, do: "Cancel", else: "+ New Application"}
       </button>
     </div>
 
@@ -23,13 +23,18 @@
               phx-value-mode={mode}
               class={"text-xs px-3 py-1 rounded cursor-pointer #{if @new_app_import_mode == mode, do: "bg-primary text-primary-content font-semibold", else: "bg-base-200 text-[color:var(--tn-text-muted)] hover:text-base-content"}"}
             >
-              <%= label %>
+              {label}
             </button>
           <% end %>
         </div>
 
         <%!-- Input area: paste, drop, or browse --%>
-        <form id="new-app-form" phx-submit="preview_new_app" phx-change="validate_upload" class="space-y-3">
+        <form
+          id="new-app-form"
+          phx-submit="preview_new_app"
+          phx-change="validate_upload"
+          class="space-y-3"
+        >
           <input type="hidden" name="name" value={@new_app_name} />
 
           <%!-- Drop zone + textarea --%>
@@ -47,21 +52,26 @@
             <div class="absolute bottom-2 right-2 flex items-center gap-2">
               <%= for entry <- @uploads.spec_file.entries do %>
                 <span class="text-xs text-primary bg-base-300 px-2 py-0.5 rounded">
-                  <%= entry.client_name %>
+                  {entry.client_name}
                 </span>
               <% end %>
               <label class="text-xs text-[color:var(--tn-text-muted)] hover:text-primary cursor-pointer">
-                <.live_file_input upload={@uploads.spec_file} class="hidden" />
-                browse
+                <.live_file_input upload={@uploads.spec_file} class="hidden" /> browse
               </label>
             </div>
           </div>
 
           <div class="flex items-center gap-2">
-            <button type="submit" disabled={@loading == :preview} class={"text-xs bg-base-200 text-base-content px-3 py-1 rounded border border-neutral hover:border-primary cursor-pointer #{if @loading == :preview, do: "opacity-50 cursor-wait"}"}>
-              <%= if @loading == :preview, do: "Parsing...", else: "Preview" %>
+            <button
+              type="submit"
+              disabled={@loading == :preview}
+              class={"text-xs bg-base-200 text-base-content px-3 py-1 rounded border border-neutral hover:border-primary cursor-pointer #{if @loading == :preview, do: "opacity-50 cursor-wait"}"}
+            >
+              {if @loading == :preview, do: "Parsing...", else: "Preview"}
             </button>
-            <span class="text-xs text-[color:var(--tn-text-muted)]">paste, drop a file, or browse</span>
+            <span class="text-xs text-[color:var(--tn-text-muted)]">
+              paste, drop a file, or browse
+            </span>
             <%= if @loading == :preview do %>
               <span class="text-xs text-primary animate-pulse">Processing specification...</span>
             <% end %>
@@ -75,7 +85,9 @@
             <form phx-submit="create_new_app" class="space-y-3">
               <div class="flex items-end gap-3">
                 <div>
-                  <label class="text-xs text-[color:var(--tn-text-muted)] block mb-1">Application Name</label>
+                  <label class="text-xs text-[color:var(--tn-text-muted)] block mb-1">
+                    Application Name
+                  </label>
                   <input
                     name="name"
                     type="text"
@@ -84,11 +96,15 @@
                     class="bg-base-100 border border-neutral rounded px-2 py-1.5 text-sm text-base-content font-mono focus:border-primary focus:outline-none"
                   />
                 </div>
-                <button type="submit" disabled={@loading == :creating} class={"bg-primary text-primary-content px-4 py-1.5 rounded text-xs font-bold hover:opacity-90 cursor-pointer #{if @loading == :creating, do: "opacity-50 cursor-wait"}"}>
+                <button
+                  type="submit"
+                  disabled={@loading == :creating}
+                  class={"bg-primary text-primary-content px-4 py-1.5 rounded text-xs font-bold hover:opacity-90 cursor-pointer #{if @loading == :creating, do: "opacity-50 cursor-wait"}"}
+                >
                   <%= if @loading == :creating do %>
                     Creating...
                   <% else %>
-                    Create with <%= length(@new_app_preview.parsed) %> routes
+                    Create with {length(@new_app_preview.parsed)} routes
                   <% end %>
                 </button>
                 <%= if @loading == :creating do %>
@@ -104,9 +120,9 @@
                   <%= for m <- (route[:methods] || route.methods || ["GET"]) do %>
                     <.method_pill method={m} />
                   <% end %>
-                  <span class="font-mono text-base-content"><%= route[:path] || route.path %></span>
+                  <span class="font-mono text-base-content">{route[:path] || route.path}</span>
                   <%= if desc = route[:description] || route.description do %>
-                    <span class="text-[color:var(--tn-text-muted)] ml-auto"><%= desc %></span>
+                    <span class="text-[color:var(--tn-text-muted)] ml-auto">{desc}</span>
                   <% end %>
                 </div>
               <% end %>
@@ -115,7 +131,7 @@
             <%!-- Skipped lines --%>
             <%= if @new_app_preview.skipped != [] do %>
               <div class="text-xs text-warning">
-                <%= length(@new_app_preview.skipped) %> lines skipped
+                {length(@new_app_preview.skipped)} lines skipped
               </div>
             <% end %>
           </div>
@@ -126,7 +142,6 @@
 
   <%!-- Status summary bar --%>
   <section>
-
     <% counts = status_counts(@drift_data) %>
 
     <div class="flex flex-wrap gap-4">
@@ -185,11 +200,11 @@
                       navigate={~p"/applications/#{app.id}"}
                       class="text-base font-semibold text-[color:var(--tn-text-default)] hover:text-primary"
                     >
-                      <%= app.name %>
+                      {app.name}
                     </.link>
 
                     <span class="text-xs text-[color:var(--tn-text-muted)]">
-                      <%= route_count(app) %> routes
+                      {route_count(app)} routes
                     </span>
                   </div>
 
@@ -197,7 +212,7 @@
                     <div class="flex flex-wrap gap-1 mt-0.5">
                       <%= for tag <- app.tags do %>
                         <span class="px-1.5 py-0.5 rounded text-[10px] bg-base-300 text-[color:var(--tn-text-muted)] font-mono">
-                          <%= tag %>
+                          {tag}
                         </span>
                       <% end %>
                     </div>

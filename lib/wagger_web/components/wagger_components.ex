@@ -38,9 +38,9 @@ defmodule WaggerWeb.WaggerComponents do
       phx-click="filter_status"
       phx-value-status={@status}
     >
-      <span class="text-4xl font-bold leading-none"><%= @count %></span>
+      <span class="text-4xl font-bold leading-none">{@count}</span>
       <span class="text-xs text-[color:var(--tn-text-muted)] uppercase tracking-wide mt-1">
-        <%= @label %>
+        {@label}
       </span>
       <%= if @selected do %>
         <span class="text-[10px] font-semibold uppercase tracking-widest mt-1 opacity-70">
@@ -77,7 +77,7 @@ defmodule WaggerWeb.WaggerComponents do
       "text-xs font-bold text-base-100",
       method_bg_class(@method)
     ]}>
-      <%= String.upcase(@method) %>
+      {String.upcase(@method)}
     </span>
     """
   end
@@ -111,9 +111,9 @@ defmodule WaggerWeb.WaggerComponents do
       provider_badge_class(@status),
       @dimmed && "opacity-40"
     ]}>
-      <span class="font-semibold"><%= @provider %></span>
+      <span class="font-semibold">{@provider}</span>
       <%= if @summary do %>
-        <span class="opacity-80"><%= @summary %></span>
+        <span class="opacity-80">{@summary}</span>
       <% end %>
     </span>
     """
@@ -142,25 +142,25 @@ defmodule WaggerWeb.WaggerComponents do
       <%= for route <- Map.get(@changes, :added, []) do %>
         <div class="text-success">
           <span class="font-bold">+ </span>
-          <span><%= route[:path] || route["path"] %></span>
+          <span>{route[:path] || route["path"]}</span>
           <%= if methods = route[:methods] || route["methods"] do %>
-            <span class="ml-2 opacity-70"><%= format_methods(methods) %></span>
+            <span class="ml-2 opacity-70">{format_methods(methods)}</span>
           <% end %>
         </div>
       <% end %>
       <%= for route <- Map.get(@changes, :removed, []) do %>
         <div class="text-error">
           <span class="font-bold">- </span>
-          <span><%= route[:path] || route["path"] %></span>
+          <span>{route[:path] || route["path"]}</span>
           <%= if methods = route[:methods] || route["methods"] do %>
-            <span class="ml-2 opacity-70"><%= format_methods(methods) %></span>
+            <span class="ml-2 opacity-70">{format_methods(methods)}</span>
           <% end %>
         </div>
       <% end %>
       <%= for route <- Map.get(@changes, :modified, []) do %>
         <div class="text-warning">
           <span class="font-bold">~ </span>
-          <span><%= route[:path] || route["path"] %></span>
+          <span>{route[:path] || route["path"]}</span>
           <span class="ml-2 opacity-70">changed</span>
         </div>
       <% end %>

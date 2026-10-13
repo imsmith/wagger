@@ -34,7 +34,6 @@ defmodule WaggerWeb.HubDetailLive do
   @doc false
   def buckets, do: Generator.buckets()
 
-
   @impl true
   def mount(%{"name" => name}, _session, socket) do
     app = Applications.get_shareable_application_by_name!(name)
@@ -80,7 +79,9 @@ defmodule WaggerWeb.HubDetailLive do
     else
       results =
         socket.assigns.routes
-        |> Enum.filter(fn r -> String.contains?(String.downcase(r.path), String.downcase(query)) end)
+        |> Enum.filter(fn r ->
+          String.contains?(String.downcase(r.path), String.downcase(query))
+        end)
         |> Enum.flat_map(fn route ->
           Enum.map(route.methods, fn method ->
             %{
@@ -164,11 +165,13 @@ defmodule WaggerWeb.HubDetailLive do
     |> Map.update("deny_backend", nil, &nil_if_blank/1)
     |> Map.reject(fn {_k, v} -> is_nil(v) end)
   end
+
   defp parse_provider_config(_provider, config), do: config
 
   defp parse_textarea_field(nil), do: nil
   defp parse_textarea_field(""), do: nil
   defp parse_textarea_field(value) when is_list(value), do: value
+
   defp parse_textarea_field(value) when is_binary(value) do
     case value |> String.split("\n") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) do
       [] -> nil

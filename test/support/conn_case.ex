@@ -34,17 +34,21 @@ defmodule WaggerWeb.ConnCase do
       end
 
       def log_in_as_admin(conn) do
-        {:ok, user} = Wagger.Accounts.register_oauth_user(%{
-          email: "admin#{System.unique_integer([:positive])}@x.com",
-          role: "admin"
-        })
+        {:ok, user} =
+          Wagger.Accounts.register_oauth_user(%{
+            email: "admin#{System.unique_integer([:positive])}@x.com",
+            role: "admin"
+          })
+
         log_in_as(conn, user)
       end
 
       def log_in_as_user(conn) do
-        {:ok, user} = Wagger.Accounts.register_oauth_user(%{
-          email: "user#{System.unique_integer([:positive])}@x.com"
-        })
+        {:ok, user} =
+          Wagger.Accounts.register_oauth_user(%{
+            email: "user#{System.unique_integer([:positive])}@x.com"
+          })
+
         log_in_as(conn, user)
       end
     end

@@ -129,7 +129,11 @@ defmodule Wagger.Generator.ValidatorTest do
     }
 
     assert {:error, errors} = Validator.validate(data, schema)
-    assert Enum.any?(errors, &(String.contains?(&1, "mode") && String.contains?(&1, "invalid enum")))
+
+    assert Enum.any?(
+             errors,
+             &(String.contains?(&1, "mode") && String.contains?(&1, "invalid enum"))
+           )
   end
 
   # 7. Reject list entry missing key leaf
@@ -199,6 +203,10 @@ defmodule Wagger.Generator.ValidatorTest do
     }
 
     assert {:error, errors} = Validator.validate(data, schema)
-    assert Enum.any?(errors, &(String.contains?(&1, "unknown_field") && String.contains?(&1, "unknown")))
+
+    assert Enum.any?(
+             errors,
+             &(String.contains?(&1, "unknown_field") && String.contains?(&1, "unknown"))
+           )
   end
 end

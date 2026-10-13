@@ -187,8 +187,11 @@ defmodule Wagger.AccountsTest do
       {:ok, user} = Accounts.register_oauth_user(%{email: "case@login.com"})
       {:ok, _} = Accounts.set_password(user, "correct-horse-battery")
 
-      assert {:ok, _} = Accounts.authenticate_by_password("Case@Login.com", "correct-horse-battery")
-      assert {:ok, _} = Accounts.authenticate_by_password(" case@login.com ", "correct-horse-battery")
+      assert {:ok, _} =
+               Accounts.authenticate_by_password("Case@Login.com", "correct-horse-battery")
+
+      assert {:ok, _} =
+               Accounts.authenticate_by_password(" case@login.com ", "correct-horse-battery")
     end
 
     test "authenticate_by_password returns :invalid_credentials for unknown email" do

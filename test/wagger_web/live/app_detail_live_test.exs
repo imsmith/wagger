@@ -12,6 +12,7 @@ defmodule WaggerWeb.AppDetailLiveTest do
 
   setup %{conn: conn} do
     conn = log_in_as_user(conn)
+
     {:ok, app} =
       Applications.create_application(%{
         "name" => "test-app",
@@ -192,7 +193,10 @@ defmodule WaggerWeb.AppDetailLiveTest do
     test "submitting GET /api/users returns :allowed verdict", %{conn: conn, app: app} do
       {:ok, lv, _html} = live(conn, ~p"/applications/#{app.id}")
 
-      html = lv |> form("form[phx-change=lookup_request]", %{method: "GET", path: "/api/users"}) |> render_change()
+      html =
+        lv
+        |> form("form[phx-change=lookup_request]", %{method: "GET", path: "/api/users"})
+        |> render_change()
 
       assert html =~ "ALLOWED"
       assert html =~ "/api/users"
@@ -250,6 +254,7 @@ defmodule WaggerWeb.AppDetailLiveTest do
 
     test "correctly round-trips two artifacts" do
       routes = [%{path: "/health", methods: ["GET"], path_type: "exact"}]
+
       modules = [
         {"Cloud Armor", Wagger.Generator.Gcp, "gcp-armor.json"},
         {"URL Map", Wagger.Generator.GcpUrlMap, "gcp-urlmap.json"}

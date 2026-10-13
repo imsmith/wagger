@@ -12,7 +12,12 @@ defmodule Wagger.Drift do
   alias Wagger.Applications.Application
 
   @enforce_keys []
-  defstruct [:status, :provider, :last_generated, changes: %{added: [], removed: [], modified: []}]
+  defstruct [
+    :status,
+    :provider,
+    :last_generated,
+    changes: %{added: [], removed: [], modified: []}
+  ]
 
   @doc """
   Detects drift between the current routes for `app` and the last snapshot for `provider`.

@@ -169,7 +169,9 @@ defmodule Wagger.Generator.Validator do
 
         if MapSet.member?(valid_names, value),
           do: [],
-          else: ["#{path}: invalid enum value #{inspect(value)}, expected one of #{inspect(MapSet.to_list(valid_names))}"]
+          else: [
+            "#{path}: invalid enum value #{inspect(value)}, expected one of #{inspect(MapSet.to_list(valid_names))}"
+          ]
       else
         []
       end

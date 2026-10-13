@@ -196,9 +196,10 @@ defmodule Wagger.Accounts do
       |> User.changeset(%{"password_hash" => nil})
       |> Repo.update()
     else
-      {:error, Comn.Errors.Registry.error!("wagger.accounts/orphan_account",
-        message: "removing this would leave the account with no way to log in"
-      )}
+      {:error,
+       Comn.Errors.Registry.error!("wagger.accounts/orphan_account",
+         message: "removing this would leave the account with no way to log in"
+       )}
     end
   end
 
@@ -270,9 +271,10 @@ defmodule Wagger.Accounts do
           Repo.delete(identity)
       end
     else
-      {:error, Comn.Errors.Registry.error!("wagger.accounts/orphan_account",
-        message: "removing this would leave the account with no way to log in"
-      )}
+      {:error,
+       Comn.Errors.Registry.error!("wagger.accounts/orphan_account",
+         message: "removing this would leave the account with no way to log in"
+       )}
     end
   end
 

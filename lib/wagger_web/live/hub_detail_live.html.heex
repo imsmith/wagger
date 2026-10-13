@@ -1,29 +1,31 @@
 <div class="space-y-6">
   <%!-- Header --%>
   <div class="flex items-center justify-between">
-    <h1 class="text-2xl font-bold text-base-content"><%= @app.name %></h1>
+    <h1 class="text-2xl font-bold text-base-content">{@app.name}</h1>
     <%= if @app.tags && @app.tags != [] do %>
       <div class="flex flex-wrap gap-1">
         <%= for tag <- @app.tags do %>
-          <span class="text-[10px] bg-base-300 border border-neutral px-1.5 py-0.5 rounded text-[color:var(--tn-text-muted)]"><%= tag %></span>
+          <span class="text-[10px] bg-base-300 border border-neutral px-1.5 py-0.5 rounded text-[color:var(--tn-text-muted)]">
+            {tag}
+          </span>
         <% end %>
       </div>
     <% end %>
   </div>
 
   <%= if @app.description do %>
-    <p class="-mt-4 text-sm text-[color:var(--tn-text-muted)]"><%= @app.description %></p>
+    <p class="-mt-4 text-sm text-[color:var(--tn-text-muted)]">{@app.description}</p>
   <% end %>
 
   <div class="-mt-4 flex items-center gap-4 text-xs text-[color:var(--tn-text-muted)]">
     <%= if @app.source do %>
-      <span class="font-mono"><%= @app.source %></span>
+      <span class="font-mono">{@app.source}</span>
       <span class="text-neutral">|</span>
     <% end %>
-    <span><%= length(@routes) %> routes</span>
+    <span>{length(@routes)} routes</span>
     <%= if @app.route_checksum do %>
       <span class="text-neutral">|</span>
-      <span class="font-mono"><%= String.slice(@app.route_checksum, 0, 12) %>...</span>
+      <span class="font-mono">{String.slice(@app.route_checksum, 0, 12)}...</span>
     <% end %>
   </div>
 
@@ -49,42 +51,59 @@
     <%= if @search_results do %>
       <div class="bg-base-200 rounded-lg border border-neutral p-3 mb-4">
         <div class="text-xs text-[color:var(--tn-text-muted)] mb-2">
-          <%= length(@search_results) %> results for "<%= @search_query %>"
+          {length(@search_results)} results for "{@search_query}"
         </div>
         <div class="space-y-0.5 max-h-80 overflow-y-auto">
           <%= for row <- @search_results do %>
             <div class="flex items-center gap-2.5 py-1 text-sm">
               <.method_pill method={row.method} />
-              <span class="font-mono text-base-content"><%= for {type, segment} <- row.path_parts do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= segment %></span><% else %><%= segment %><% end %><% end %></span>
+              <span class="font-mono text-base-content">
+                <%= for {type, segment} <- row.path_parts do %>
+                  <%= if type == "param" do %>
+                    <span class="text-secondary font-semibold">{segment}</span>
+                  <% else %>
+                    {segment}
+                  <% end %>
+                <% end %>
+              </span>
               <%= if row.description do %>
-                <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto"><%= row.description %></span>
+                <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto">
+                  {row.description}
+                </span>
               <% end %>
             </div>
           <% end %>
         </div>
       </div>
-
     <% else %>
       <%!-- Breadcrumb navigation --%>
       <% current = current_subtree(@route_tree, @treemap_path) %>
 
       <%= if @treemap_path != [] do %>
         <div class="flex items-center gap-1.5 mb-3 text-xs font-mono">
-          <button phx-click="treemap_back" phx-value-depth="0" class="text-primary hover:underline cursor-pointer">
+          <button
+            phx-click="treemap_back"
+            phx-value-depth="0"
+            class="text-primary hover:underline cursor-pointer"
+          >
             /
           </button>
           <%= for {segment, idx} <- Enum.with_index(@treemap_path) do %>
             <span class="text-[color:var(--tn-text-muted)]">/</span>
             <%= if idx < length(@treemap_path) - 1 do %>
-              <button phx-click="treemap_back" phx-value-depth={idx + 1} class="text-primary hover:underline cursor-pointer">
-                <%= segment %>
+              <button
+                phx-click="treemap_back"
+                phx-value-depth={idx + 1}
+                class="text-primary hover:underline cursor-pointer"
+              >
+                {segment}
               </button>
             <% else %>
-              <span class="text-base-content font-semibold"><%= segment %></span>
+              <span class="text-base-content font-semibold">{segment}</span>
             <% end %>
           <% end %>
           <span class="text-[color:var(--tn-text-muted)] ml-2">
-            (<%= current[:_count] || 0 %> endpoints)
+            ({current[:_count] || 0} endpoints)
           </span>
         </div>
       <% end %>
@@ -108,20 +127,21 @@
               <div>
                 <div class="text-sm font-semibold text-base-content truncate">
                   <%= if is_leaf do %>
-                    <span class="text-secondary"><%= segment %></span>
+                    <span class="text-secondary">{segment}</span>
                   <% else %>
-                    <span class="text-primary"><%= segment %></span>
+                    <span class="text-primary">{segment}</span>
                   <% end %>
                 </div>
                 <div class="text-[10px] text-[color:var(--tn-text-muted)] mt-0.5">
-                  <%= count %> endpoint<%= if count != 1, do: "s" %>
+                  {count} endpoint{if count != 1, do: "s"}
                 </div>
               </div>
               <%= if is_leaf do %>
                 <div class="flex gap-1 flex-wrap mt-2">
                   <%= for route <- Map.get(child, :_routes, []) do %>
                     <%= for m <- route.methods do %>
-                      <span class={"inline-block w-1.5 h-1.5 rounded-full #{method_dot_color(m)}"}></span>
+                      <span class={"inline-block w-1.5 h-1.5 rounded-full #{method_dot_color(m)}"}>
+                      </span>
                     <% end %>
                   <% end %>
                 </div>
@@ -139,16 +159,25 @@
                   <div class="flex-shrink-0 w-16">
                     <.method_pill method={row.method} />
                   </div>
-                  <span class="font-mono text-base-content"><%= for {type, seg} <- row.path_parts do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= seg %></span><% else %><%= seg %><% end %><% end %></span>
+                  <span class="font-mono text-base-content">
+                    <%= for {type, seg} <- row.path_parts do %>
+                      <%= if type == "param" do %>
+                        <span class="text-secondary font-semibold">{seg}</span>
+                      <% else %>
+                        {seg}
+                      <% end %>
+                    <% end %>
+                  </span>
                   <%= if row.description do %>
-                    <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto truncate max-w-md"><%= row.description %></span>
+                    <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto truncate max-w-md">
+                      {row.description}
+                    </span>
                   <% end %>
                 </div>
               <% end %>
             </div>
           </div>
         <% end %>
-
       <% else %>
         <div class="bg-base-200 rounded-lg border border-neutral overflow-hidden">
           <div class="space-y-0">
@@ -157,12 +186,24 @@
                 <div class="flex-shrink-0 w-16">
                   <.method_pill method={row.method} />
                 </div>
-                <span class="font-mono text-base-content"><%= for {type, seg} <- row.path_parts do %><%= if type == "param" do %><span class="text-secondary font-semibold"><%= seg %></span><% else %><%= seg %><% end %><% end %></span>
+                <span class="font-mono text-base-content">
+                  <%= for {type, seg} <- row.path_parts do %>
+                    <%= if type == "param" do %>
+                      <span class="text-secondary font-semibold">{seg}</span>
+                    <% else %>
+                      {seg}
+                    <% end %>
+                  <% end %>
+                </span>
                 <%= if row.rate_limit do %>
-                  <span class="flex-shrink-0 text-[10px] bg-base-300 border border-neutral px-1.5 py-0.5 rounded text-[color:var(--tn-text-muted)]"><%= row.rate_limit %>/min</span>
+                  <span class="flex-shrink-0 text-[10px] bg-base-300 border border-neutral px-1.5 py-0.5 rounded text-[color:var(--tn-text-muted)]">
+                    {row.rate_limit}/min
+                  </span>
                 <% end %>
                 <%= if row.description do %>
-                  <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto truncate max-w-md"><%= row.description %></span>
+                  <span class="text-[color:var(--tn-text-muted)] text-xs ml-auto truncate max-w-md">
+                    {row.description}
+                  </span>
                 <% end %>
               </div>
             <% end %>
@@ -182,7 +223,7 @@
       <%= for {bucket_label, bucket_providers} <- buckets() do %>
         <div class="flex items-center gap-3 flex-wrap">
           <span class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)] w-32">
-            <%= bucket_label %>
+            {bucket_label}
           </span>
           <%= if bucket_providers == [] do %>
             <span class="text-xs italic text-[color:var(--tn-text-muted)]">(none yet)</span>
@@ -193,7 +234,7 @@
                 phx-value-provider={provider}
                 class={"text-xs px-3 py-1.5 rounded cursor-pointer transition-colors border #{if @selected_provider == provider, do: "bg-primary text-primary-content border-primary", else: "text-base-content border-neutral hover:border-primary"}"}
               >
-                <%= String.capitalize(provider) %>
+                {String.capitalize(provider)}
               </button>
             <% end %>
           <% end %>
@@ -208,7 +249,9 @@
             <% {field, label} = config_field_key_label(field_spec) %>
             <% input_type = config_field_type(field_spec) %>
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-[color:var(--tn-text-muted)] uppercase tracking-wide"><%= label %></label>
+              <label class="text-xs text-[color:var(--tn-text-muted)] uppercase tracking-wide">
+                {label}
+              </label>
               <%= if input_type == :textarea do %>
                 <textarea
                   name={field}
@@ -237,18 +280,24 @@
           <p class="mt-2 text-xs text-[color:var(--tn-text-muted)] leading-relaxed">
             Deploys as: URL Map routes known (method, path) traffic to a known-traffic backend
             (with Cloud Armor policy attached). Unknown traffic routes to a deny backend returning 403.
-            Substitute <code class="bg-base-100 px-1 rounded">__KNOWN_TRAFFIC_BACKEND__</code> and
-            <code class="bg-base-100 px-1 rounded">__DENY_BACKEND__</code> placeholders or set them above.
+            Substitute <code class="bg-base-100 px-1 rounded">__KNOWN_TRAFFIC_BACKEND__</code>
+            and <code class="bg-base-100 px-1 rounded">__DENY_BACKEND__</code>
+            placeholders or set them above.
           </p>
         <% end %>
         <% artifacts = split_snapshot_output(@generated_output) %>
         <%= for {label, filename, content} <- artifacts do %>
-          <% artifact_id = if label, do: "hub-output-#{filename |> String.replace(~r/[^a-z0-9]/, "-")}", else: "hub-output" %>
+          <% artifact_id =
+            if label,
+              do: "hub-output-#{filename |> String.replace(~r/[^a-z0-9]/, "-")}",
+              else: "hub-output" %>
           <div class="relative mt-4">
             <%= if label do %>
               <div class="flex items-center justify-between mb-1">
-                <span class="text-xs font-semibold text-[color:var(--tn-text-muted)] font-mono"><%= filename %></span>
-                <span class="text-[10px] text-[color:var(--tn-text-muted)]"><%= label %></span>
+                <span class="text-xs font-semibold text-[color:var(--tn-text-muted)] font-mono">
+                  {filename}
+                </span>
+                <span class="text-[10px] text-[color:var(--tn-text-muted)]">{label}</span>
               </div>
             <% end %>
             <button
@@ -258,7 +307,11 @@
             >
               Copy
             </button>
-            <pre id={artifact_id} tabindex="0" class="wagger-copyable p-3 bg-base-100 border border-neutral rounded text-xs max-h-96 overflow-y-auto whitespace-pre-wrap break-all focus:outline focus:outline-2 focus:outline-primary"><code><%= content %></code></pre>
+            <pre
+              id={artifact_id}
+              tabindex="0"
+              class="wagger-copyable p-3 bg-base-100 border border-neutral rounded text-xs max-h-96 overflow-y-auto whitespace-pre-wrap break-all focus:outline focus:outline-2 focus:outline-primary"
+            ><code><%= content %></code></pre>
           </div>
         <% end %>
       <% end %>

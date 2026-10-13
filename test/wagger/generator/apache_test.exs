@@ -7,10 +7,34 @@ defmodule Wagger.Generator.ApacheTest do
   alias Wagger.Generator.Apache
 
   @routes [
-    %{path: "/api/users", methods: ["GET", "POST"], path_type: "exact", rate_limit: 100, description: "Users"},
-    %{path: "/api/users/{id}", methods: ["GET", "PUT", "DELETE"], path_type: "exact", rate_limit: nil, description: "User detail"},
-    %{path: "/static/", methods: ["GET"], path_type: "prefix", rate_limit: nil, description: "Static"},
-    %{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil, description: "Health"}
+    %{
+      path: "/api/users",
+      methods: ["GET", "POST"],
+      path_type: "exact",
+      rate_limit: 100,
+      description: "Users"
+    },
+    %{
+      path: "/api/users/{id}",
+      methods: ["GET", "PUT", "DELETE"],
+      path_type: "exact",
+      rate_limit: nil,
+      description: "User detail"
+    },
+    %{
+      path: "/static/",
+      methods: ["GET"],
+      path_type: "prefix",
+      rate_limit: nil,
+      description: "Static"
+    },
+    %{
+      path: "/health",
+      methods: ["GET"],
+      path_type: "exact",
+      rate_limit: nil,
+      description: "Health"
+    }
   ]
 
   @config %{prefix: "myapp"}
@@ -41,7 +65,13 @@ defmodule Wagger.Generator.ApacheTest do
     end
 
     test "packaging leaves honour overrides" do
-      config = Map.merge(@config, %{audit_log_path: "/var/log/ms.log", tmp_dir: "/srv/tmp", data_dir: "/srv/data"})
+      config =
+        Map.merge(@config, %{
+          audit_log_path: "/var/log/ms.log",
+          tmp_dir: "/srv/tmp",
+          data_dir: "/srv/data"
+        })
+
       cfg = Apache.map_routes(@routes, config)["apache-config"]
       assert cfg["audit-log-path"] == "/var/log/ms.log"
       assert cfg["tmp-dir"] == "/srv/tmp"
@@ -112,7 +142,9 @@ defmodule Wagger.Generator.ApacheTest do
     test "directives inside the IfModule guard are indented two spaces" do
       assert {:ok, output} = Generator.generate(Apache, @routes, @config)
       assert output =~ "  SecRuleEngine On"
-      assert output =~ ~s(  SecRule REQUEST_URI "@rx ^/api/users$" "id:100001,phase:1,chain,allow")
+
+      assert output =~
+               ~s(  SecRule REQUEST_URI "@rx ^/api/users$" "id:100001,phase:1,chain,allow")
     end
   end
 end

@@ -33,6 +33,7 @@ defmodule WaggerWeb.AccountLiveTest do
     identity = Wagger.Repo.get_by!(Wagger.Accounts.OauthIdentity, user_id: user.id)
 
     {:ok, view, _html} = live(conn, ~p"/account")
+
     html =
       view
       |> element(~s|button[phx-click="unlink"][phx-value-id="#{identity.id}"]|)
@@ -47,6 +48,7 @@ defmodule WaggerWeb.AccountLiveTest do
     identity = Wagger.Repo.get_by!(Wagger.Accounts.OauthIdentity, user_id: user.id)
 
     {:ok, view, _html} = live(conn, ~p"/account")
+
     view
     |> element(~s|button[phx-click="unlink"][phx-value-id="#{identity.id}"]|)
     |> render_click()

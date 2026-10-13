@@ -8,7 +8,12 @@ defmodule Wagger.Generator.AzureTest do
 
   @routes [
     %{path: "/api/users", methods: ["GET", "POST"], path_type: "exact", rate_limit: 100},
-    %{path: "/api/users/{id}", methods: ["GET", "PUT", "DELETE"], path_type: "exact", rate_limit: nil},
+    %{
+      path: "/api/users/{id}",
+      methods: ["GET", "PUT", "DELETE"],
+      path_type: "exact",
+      rate_limit: nil
+    },
     %{path: "/static/", methods: ["GET"], path_type: "prefix", rate_limit: nil},
     %{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil}
   ]
@@ -133,6 +138,7 @@ defmodule Wagger.Generator.AzureTest do
       rules = instance["azure-fd-policy"]["custom-rules"]["rules"]
 
       method_rule = Enum.find(rules, &String.contains?(&1["name"], "EnforceMethods"))
+
       method_cond =
         Enum.find(method_rule["match-conditions"], &(&1["match-variable"] == "RequestMethod"))
 
@@ -148,6 +154,7 @@ defmodule Wagger.Generator.AzureTest do
       ]
 
       instance = Azure.map_routes(routes, @config)
+
       method_rules =
         instance["azure-fd-policy"]["custom-rules"]["rules"]
         |> Enum.filter(&String.contains?(&1["name"], "EnforceMethods"))
@@ -174,18 +181,19 @@ defmodule Wagger.Generator.AzureTest do
       multi_method_rules =
         Azure.map_routes(multi, @config)["azure-fd-policy"]["custom-rules"]["rules"]
         |> Enum.filter(&String.contains?(&1["name"], "EnforceMethods"))
-        |> Enum.map(&(&1["match-conditions"]))
+        |> Enum.map(& &1["match-conditions"])
 
       atomic_method_rules =
         Azure.map_routes(atomic, @config)["azure-fd-policy"]["custom-rules"]["rules"]
         |> Enum.filter(&String.contains?(&1["name"], "EnforceMethods"))
-        |> Enum.map(&(&1["match-conditions"]))
+        |> Enum.map(& &1["match-conditions"])
 
       assert multi_method_rules == atomic_method_rules
     end
 
     test "method-enforcement rules have priority between allowlist (1) and rate-limit (100)" do
       instance = Azure.map_routes(@routes, @config)
+
       method_rules =
         instance["azure-fd-policy"]["custom-rules"]["rules"]
         |> Enum.filter(&String.contains?(&1["name"], "EnforceMethods"))
@@ -210,6 +218,7 @@ defmodule Wagger.Generator.AzureTest do
 
       assert method_cond["negateCondition"] == true
       assert is_list(method_cond["matchValue"])
+
       assert "GET" in method_cond["matchValue"] or
                Enum.any?(method_cond["matchValue"], &(&1 in ["GET", "POST", "PUT", "DELETE"]))
     end
@@ -258,7 +267,9 @@ defmodule Wagger.Generator.AzureTest do
     end
 
     test "Detection mode is preserved in output" do
-      assert {:ok, output} = Generator.generate(Azure, @routes, %{prefix: "myapp", mode: "Detection"})
+      assert {:ok, output} =
+               Generator.generate(Azure, @routes, %{prefix: "myapp", mode: "Detection"})
+
       decoded = Jason.decode!(output)
       assert get_in(decoded, ["properties", "policySettings", "mode"]) == "Detection"
     end

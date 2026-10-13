@@ -21,7 +21,11 @@ defmodule WaggerWeb.UserLive do
   end
 
   @impl true
-  def handle_event("create_user", %{"username" => username, "display_name" => display_name}, socket) do
+  def handle_event(
+        "create_user",
+        %{"username" => username, "display_name" => display_name},
+        socket
+      ) do
     case Accounts.create_user(%{"username" => username, "display_name" => display_name}) do
       {:ok, _user, api_key} ->
         {:noreply,

@@ -47,7 +47,14 @@ defmodule Wagger.Generator.Mcp do
   defp field_for_reason({:invalid_identifier, field, _}), do: field
   defp field_for_reason({:duplicate, collection, _}), do: collection
 
-  @extensions_resource Path.join([__DIR__, "..", "..", "..", "yang", "wagger-mcp-extensions.yang"])
+  @extensions_resource Path.join([
+                         __DIR__,
+                         "..",
+                         "..",
+                         "..",
+                         "yang",
+                         "wagger-mcp-extensions.yang"
+                       ])
   @external_resource @extensions_resource
   @extensions_source File.read!(@extensions_resource)
 

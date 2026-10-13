@@ -8,7 +8,12 @@ defmodule Wagger.Generator.CloudflareTest do
 
   @routes [
     %{path: "/api/users", methods: ["GET", "POST"], path_type: "exact", rate_limit: 100},
-    %{path: "/api/users/{id}", methods: ["GET", "PUT", "DELETE"], path_type: "exact", rate_limit: nil},
+    %{
+      path: "/api/users/{id}",
+      methods: ["GET", "PUT", "DELETE"],
+      path_type: "exact",
+      rate_limit: nil
+    },
     %{path: "/static/", methods: ["GET"], path_type: "prefix", rate_limit: nil},
     %{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil}
   ]
@@ -105,6 +110,7 @@ defmodule Wagger.Generator.CloudflareTest do
   describe "method enforcement on block rule" do
     test "block expression references http.request.method" do
       instance = Cloudflare.map_routes(@routes, @config)
+
       block_rule =
         instance["cloudflare-config"]["rules"]
         |> Enum.find(&(&1["action"] == "block"))
@@ -115,6 +121,7 @@ defmodule Wagger.Generator.CloudflareTest do
     test "single-method route uses eq for method check" do
       routes = [%{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil}]
       instance = Cloudflare.map_routes(routes, @config)
+
       block_rule =
         instance["cloudflare-config"]["rules"]
         |> Enum.find(&(&1["action"] == "block"))
@@ -128,6 +135,7 @@ defmodule Wagger.Generator.CloudflareTest do
       ]
 
       instance = Cloudflare.map_routes(routes, @config)
+
       block_rule =
         instance["cloudflare-config"]["rules"]
         |> Enum.find(&(&1["action"] == "block"))
@@ -142,6 +150,7 @@ defmodule Wagger.Generator.CloudflareTest do
       ]
 
       instance = Cloudflare.map_routes(routes, @config)
+
       expr =
         instance["cloudflare-config"]["rules"]
         |> Enum.find(&(&1["action"] == "block"))
@@ -169,6 +178,7 @@ defmodule Wagger.Generator.CloudflareTest do
       ]
 
       instance = Cloudflare.map_routes(routes, @config)
+
       expr =
         instance["cloudflare-config"]["rules"]
         |> Enum.find(&(&1["action"] == "block"))

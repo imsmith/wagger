@@ -72,14 +72,15 @@ defmodule WaggerWeb.DashboardLive do
   def handle_event("preview_new_app", params, socket) do
     {input, socket} =
       case consume_uploaded_entries(socket, :spec_file, fn %{path: path}, _entry ->
-        {:ok, File.read!(path)}
-      end) do
+             {:ok, File.read!(path)}
+           end) do
         [content | _] -> {content, socket}
         [] -> {params["input"] || "", socket}
       end
 
     if String.trim(input) == "" do
-      {:noreply, put_flash(socket, :error, "No input provided — paste data, drop a file, or browse")}
+      {:noreply,
+       put_flash(socket, :error, "No input provided — paste data, drop a file, or browse")}
     else
       name = params["name"] || ""
       socket = assign(socket, :loading, :preview)
@@ -112,7 +113,18 @@ defmodule WaggerWeb.DashboardLive do
     case Applications.create_application(%{name: name}) do
       {:ok, app} ->
         for route_map <- preview.parsed do
-          attrs = Map.take(route_map, [:path, :methods, :path_type, :description, :query_params, :headers, :rate_limit, :tags])
+          attrs =
+            Map.take(route_map, [
+              :path,
+              :methods,
+              :path_type,
+              :description,
+              :query_params,
+              :headers,
+              :rate_limit,
+              :tags
+            ])
+
           Routes.create_route(app, attrs)
         end
 
@@ -120,12 +132,18 @@ defmodule WaggerWeb.DashboardLive do
         drift_data = build_drift_data(apps)
 
         {:noreply,
-          socket
-          |> assign(apps: apps, drift_data: drift_data, loading: nil,
-                    show_new_app: false, new_app_preview: nil,
-                    new_app_name: "", new_app_input: "")
-          |> put_flash(:info, "Created #{name} with #{length(preview.parsed)} routes")
-          |> push_navigate(to: ~p"/applications/#{app.id}")}
+         socket
+         |> assign(
+           apps: apps,
+           drift_data: drift_data,
+           loading: nil,
+           show_new_app: false,
+           new_app_preview: nil,
+           new_app_name: "",
+           new_app_input: ""
+         )
+         |> put_flash(:info, "Created #{name} with #{length(preview.parsed)} routes")
+         |> push_navigate(to: ~p"/applications/#{app.id}")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         msg = changeset.errors |> Enum.map(fn {k, {v, _}} -> "#{k} #{v}" end) |> Enum.join(", ")
@@ -146,16 +164,26 @@ defmodule WaggerWeb.DashboardLive do
             {:ok, spec} ->
               {routes, errors} = Import.OpenApi.parse(spec)
               title = get_in(spec, ["info", "title"]) || ""
-              suggested = title |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-") |> String.trim("-")
+
+              suggested =
+                title
+                |> String.downcase()
+                |> String.replace(~r/[^a-z0-9]+/, "-")
+                |> String.trim("-")
+
               {routes, errors, suggested}
+
             {:error, %Jason.DecodeError{} = err} ->
               {[], ["Invalid JSON: #{Exception.message(err)}"], ""}
+
             {:error, _} ->
               {[], ["Invalid JSON"], ""}
           end
+
         "bulk" ->
           {routes, skipped} = Import.Bulk.parse(input)
           {routes, skipped, ""}
+
         "accesslog" ->
           {routes, skipped} = Import.AccessLog.parse(input)
           {routes, skipped, ""}
@@ -192,7 +220,8 @@ defmodule WaggerWeb.DashboardLive do
       %{drifted: N, current: N, never_generated: N}
   """
   def status_counts(drift_data) do
-    Enum.reduce(drift_data, %{drifted: 0, current: 0, never_generated: 0}, fn {_app_id, providers}, acc ->
+    Enum.reduce(drift_data, %{drifted: 0, current: 0, never_generated: 0}, fn {_app_id, providers},
+                                                                              acc ->
       Enum.reduce(providers, acc, fn {_provider, drift}, inner ->
         Map.update!(inner, drift.status, &(&1 + 1))
       end)

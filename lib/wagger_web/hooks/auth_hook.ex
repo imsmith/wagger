@@ -10,7 +10,8 @@ defmodule WaggerWeb.Hooks.AuthHook do
   alias Wagger.Repo
   alias Wagger.Accounts.User
 
-  def on_mount(:require_user, _params, %{"user_id" => user_id}, socket) when is_integer(user_id) do
+  def on_mount(:require_user, _params, %{"user_id" => user_id}, socket)
+      when is_integer(user_id) do
     case Repo.get(User, user_id) do
       nil ->
         halt_to_login(socket)

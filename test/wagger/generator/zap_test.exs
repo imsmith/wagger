@@ -7,10 +7,34 @@ defmodule Wagger.Generator.ZapTest do
   alias Wagger.Generator.Zap
 
   @routes [
-    %{path: "/api/users", methods: ["GET", "POST"], path_type: "exact", rate_limit: nil, description: "Users"},
-    %{path: "/api/users/{id}", methods: ["GET", "PUT", "DELETE"], path_type: "exact", rate_limit: nil, description: "User detail"},
-    %{path: "/static/", methods: ["GET"], path_type: "prefix", rate_limit: nil, description: "Static"},
-    %{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil, description: "Health"}
+    %{
+      path: "/api/users",
+      methods: ["GET", "POST"],
+      path_type: "exact",
+      rate_limit: nil,
+      description: "Users"
+    },
+    %{
+      path: "/api/users/{id}",
+      methods: ["GET", "PUT", "DELETE"],
+      path_type: "exact",
+      rate_limit: nil,
+      description: "User detail"
+    },
+    %{
+      path: "/static/",
+      methods: ["GET"],
+      path_type: "prefix",
+      rate_limit: nil,
+      description: "Static"
+    },
+    %{
+      path: "/health",
+      methods: ["GET"],
+      path_type: "exact",
+      rate_limit: nil,
+      description: "Health"
+    }
   ]
 
   @config %{prefix: "myapp", target_url: "https://staging.example.com"}
@@ -44,6 +68,7 @@ defmodule Wagger.Generator.ZapTest do
     test "positive tests: one per route per allowed method" do
       instance = Zap.map_routes(@routes, @config)
       positive = instance["zap-config"]["positive-tests"]
+
       # /api/users: GET, POST (2) + /api/users/{id}: GET, PUT, DELETE (3) + /static/: GET (1) + /health: GET (1) = 7
       assert length(positive) == 7
     end
@@ -76,10 +101,13 @@ defmodule Wagger.Generator.ZapTest do
     test "negative method tests contain correct disallowed methods" do
       instance = Zap.map_routes(@routes, @config)
       negative = instance["zap-config"]["negative-method-tests"]
-      users_methods = negative
+
+      users_methods =
+        negative
         |> Enum.filter(&(&1["url"] == "https://staging.example.com/api/users"))
         |> Enum.map(& &1["method"])
         |> Enum.sort()
+
       assert users_methods == ~w(DELETE HEAD OPTIONS PATCH PUT)
     end
 

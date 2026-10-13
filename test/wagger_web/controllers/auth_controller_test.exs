@@ -60,7 +60,9 @@ defmodule WaggerWeb.AuthControllerTest do
 
     test "existing identity logs the user in", %{conn: conn} do
       {:ok, user} = Accounts.register_oauth_user(%{email: "ret@x.com"})
-      {:ok, _} = Accounts.link_identity(user, "google", %{provider_uid: "ret-1", email: "ret@x.com"})
+
+      {:ok, _} =
+        Accounts.link_identity(user, "google", %{provider_uid: "ret-1", email: "ret@x.com"})
 
       conn =
         conn
@@ -103,6 +105,7 @@ defmodule WaggerWeb.AuthControllerTest do
         |> get("/auth/google/callback")
 
       assert redirected_to(conn) == "/auth/invite"
+
       assert %{"provider" => "google", "email" => "new@x.com"} =
                get_session(conn, :pending_oauth)
     end
@@ -119,13 +122,15 @@ defmodule WaggerWeb.AuthControllerTest do
     test "renders the form when pending OAuth is in session", %{conn: conn} do
       conn =
         conn
-        |> Plug.Test.init_test_session(pending_oauth: %{
-          "provider" => "google",
-          "provider_uid" => "x",
-          "email" => "x@y.com",
-          "display_name" => "X",
-          "raw_info" => ""
-        })
+        |> Plug.Test.init_test_session(
+          pending_oauth: %{
+            "provider" => "google",
+            "provider_uid" => "x",
+            "email" => "x@y.com",
+            "display_name" => "X",
+            "raw_info" => ""
+          }
+        )
         |> get(~p"/auth/invite")
 
       assert html_response(conn, 200) =~ "invite code"
@@ -135,13 +140,15 @@ defmodule WaggerWeb.AuthControllerTest do
   describe "invite_submit/2" do
     setup %{conn: conn} do
       conn =
-        Plug.Test.init_test_session(conn, pending_oauth: %{
-          "provider" => "google",
-          "provider_uid" => "p-1",
-          "email" => "p@p.com",
-          "display_name" => "P",
-          "raw_info" => ""
-        })
+        Plug.Test.init_test_session(conn,
+          pending_oauth: %{
+            "provider" => "google",
+            "provider_uid" => "p-1",
+            "email" => "p@p.com",
+            "display_name" => "P",
+            "raw_info" => ""
+          }
+        )
 
       {:ok, code} = Invites.create_code(%{label: "ok"})
       %{conn: conn, code: code}

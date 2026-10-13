@@ -13,6 +13,7 @@ defmodule Wagger.OauthCredentialsRoundtripTest do
     on_exit(fn ->
       Application.delete_env(:ueberauth, Ueberauth.Strategy.Google.OAuth)
     end)
+
     :ok
   end
 

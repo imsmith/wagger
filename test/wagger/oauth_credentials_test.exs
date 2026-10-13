@@ -17,7 +17,9 @@ defmodule Wagger.OauthCredentialsTest do
   describe "upsert/3 and get/1" do
     test "stores client_id cleartext, secret locked, retrievable plaintext" do
       assert {:ok, _} = OauthCredentials.upsert("google", "id-1", "secret-1")
-      assert {:ok, %{client_id: "id-1", client_secret: "secret-1"}} = OauthCredentials.get("google")
+
+      assert {:ok, %{client_id: "id-1", client_secret: "secret-1"}} =
+               OauthCredentials.get("google")
 
       row = Wagger.Repo.get_by!(Wagger.OauthCredentials.Credential, provider: "google")
       refute row.client_secret_locked == "secret-1"
@@ -27,6 +29,7 @@ defmodule Wagger.OauthCredentialsTest do
     test "upsert overwrites existing credentials for a provider" do
       {:ok, _} = OauthCredentials.upsert("google", "id-old", "secret-old")
       {:ok, _} = OauthCredentials.upsert("google", "id-new", "secret-new")
+
       assert {:ok, %{client_id: "id-new", client_secret: "secret-new"}} =
                OauthCredentials.get("google")
     end
@@ -52,6 +55,7 @@ defmodule Wagger.OauthCredentialsTest do
 
       try do
         :ok = OauthCredentials.load_into_app_env()
+
         assert {:ok, %{client_id: "envid", client_secret: "envsecret"}} =
                  OauthCredentials.get("github")
 

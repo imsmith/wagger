@@ -83,7 +83,8 @@ defmodule Wagger.Generator.Zap do
     negative_method_job = render_negative_job("waf-negative-method-tests", negative_method)
     negative_path_job = render_negative_job("waf-negative-path-tests", negative_path)
 
-    (header <> "\njobs:\n" <> positive_job <> "\n" <> negative_method_job <> "\n" <> negative_path_job)
+    (header <>
+       "\njobs:\n" <> positive_job <> "\n" <> negative_method_job <> "\n" <> negative_path_job)
     |> String.trim_trailing()
   end
 

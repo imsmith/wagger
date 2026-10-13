@@ -8,7 +8,12 @@ defmodule Wagger.Generator.CaddyTest do
 
   @routes [
     %{path: "/api/users", methods: ["GET", "POST"], path_type: "exact", rate_limit: 100},
-    %{path: "/api/users/{id}", methods: ["GET", "PUT", "DELETE"], path_type: "exact", rate_limit: nil},
+    %{
+      path: "/api/users/{id}",
+      methods: ["GET", "PUT", "DELETE"],
+      path_type: "exact",
+      rate_limit: nil
+    },
     %{path: "/static/", methods: ["GET"], path_type: "prefix", rate_limit: nil},
     %{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil}
   ]

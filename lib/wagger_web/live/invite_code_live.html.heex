@@ -17,8 +17,11 @@
     </div>
     <div>
       <label class="text-sm">Expires (ISO 8601)</label>
-      <input name="invite[expires_at]" placeholder="2099-01-01T00:00:00Z"
-        class="w-full rounded border px-2 py-1" />
+      <input
+        name="invite[expires_at]"
+        placeholder="2099-01-01T00:00:00Z"
+        class="w-full rounded border px-2 py-1"
+      />
     </div>
     <button type="submit" class="col-span-3 rounded bg-blue-600 px-4 py-2 text-white">
       Generate code
@@ -44,9 +47,14 @@
         <td>{c.uses_count}{if c.max_uses, do: "/" <> Integer.to_string(c.max_uses)}</td>
         <td>{c.expires_at}</td>
         <td>
-          <button :if={c.status == :active}
-            phx-click="revoke" phx-value-id={c.id}
-            class="text-red-600 hover:underline">Revoke</button>
+          <button
+            :if={c.status == :active}
+            phx-click="revoke"
+            phx-value-id={c.id}
+            class="text-red-600 hover:underline"
+          >
+            Revoke
+          </button>
         </td>
       </tr>
     </tbody>

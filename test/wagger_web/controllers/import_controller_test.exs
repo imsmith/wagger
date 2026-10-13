@@ -142,7 +142,14 @@ defmodule WaggerWeb.ImportControllerTest do
       # Tamper: add an extra route that wasn't in the original preview
       tampered_parsed =
         preview_resp["parsed"] ++
-          [%{"path" => "/api/injected", "methods" => ["DELETE"], "path_type" => "exact", "description" => nil}]
+          [
+            %{
+              "path" => "/api/injected",
+              "methods" => ["DELETE"],
+              "path_type" => "exact",
+              "description" => nil
+            }
+          ]
 
       confirm_conn =
         post(conn, ~p"/api/applications/#{app.id}/import/confirm", %{

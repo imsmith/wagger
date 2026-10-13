@@ -132,7 +132,8 @@ defmodule Wagger.Generator do
       {:error, reason} ->
         {:error,
          Comn.Errors.Registry.error!("wagger.generator/unknown_provider",
-           message: "Could not load provider module #{inspect(provider_module)}: #{inspect(reason)}",
+           message:
+             "Could not load provider module #{inspect(provider_module)}: #{inspect(reason)}",
            field: "provider"
          )}
     end

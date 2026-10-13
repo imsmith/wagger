@@ -10,86 +10,106 @@ defmodule Wagger.Errors do
 
   # -- Generator pipeline --
 
-  register_error "wagger.generator/yang_parse_failed", :internal,
+  register_error("wagger.generator/yang_parse_failed", :internal,
     message: "Failed to parse YANG schema"
+  )
 
-  register_error "wagger.generator/yang_resolve_failed", :internal,
+  register_error("wagger.generator/yang_resolve_failed", :internal,
     message: "Failed to resolve YANG schema"
+  )
 
-  register_error "wagger.generator/validation_failed", :validation,
+  register_error("wagger.generator/validation_failed", :validation,
     message: "Instance data failed YANG schema validation"
+  )
 
-  register_error "wagger.generator/unknown_provider", :validation,
+  register_error("wagger.generator/unknown_provider", :validation,
     message: "Unknown provider name",
     status: 400
+  )
 
-  register_error "wagger.generator/serialization_failed", :internal,
+  register_error("wagger.generator/serialization_failed", :internal,
     message: "Failed to serialize provider config"
+  )
 
-  register_error "wagger.generator/invalid_capabilities", :validation,
+  register_error("wagger.generator/invalid_capabilities", :validation,
     message: "Capability map is malformed"
+  )
 
-  register_error "wagger.generator/mcp_roundtrip_failed", :internal,
+  register_error("wagger.generator/mcp_roundtrip_failed", :internal,
     message: "Generated MCP YANG failed round-trip validation"
+  )
 
-  register_error "wagger.generator/canonical_mcp_invalid", :internal,
+  register_error("wagger.generator/canonical_mcp_invalid", :internal,
     message: "Canonical mcp.yang failed to parse or resolve"
+  )
 
-  register_error "wagger.generator/derivation_failed", :validation,
+  register_error("wagger.generator/derivation_failed", :validation,
     message: "Could not derive MCP capabilities from annotated YANG"
+  )
 
   # -- Accounts --
 
-  register_error "wagger.accounts/user_creation_failed", :validation,
+  register_error("wagger.accounts/user_creation_failed", :validation,
     message: "Could not create user"
+  )
 
-  register_error "wagger.accounts/auth_failed", :auth,
+  register_error("wagger.accounts/auth_failed", :auth,
     message: "Invalid or missing API key",
     status: 401
+  )
 
-  register_error "wagger.accounts/protected_user", :auth,
+  register_error("wagger.accounts/protected_user", :auth,
     message: "Cannot delete the admin user",
     status: 403
+  )
 
-  register_error "wagger.accounts/orphan_account", :validation,
+  register_error("wagger.accounts/orphan_account", :validation,
     message: "Removing this would leave the account with no way to log in",
     status: 409
+  )
 
-  register_error "wagger.accounts/identity_not_found", :validation,
+  register_error("wagger.accounts/identity_not_found", :validation,
     message: "OAuth identity not found",
     status: 404
+  )
 
   # -- Snapshots --
 
-  register_error "wagger.snapshots/decryption_failed", :internal,
+  register_error("wagger.snapshots/decryption_failed", :internal,
     message: "Failed to decrypt snapshot output"
+  )
 
-  register_error "wagger.snapshots/creation_failed", :persistence,
+  register_error("wagger.snapshots/creation_failed", :persistence,
     message: "Failed to create snapshot"
+  )
 
   # -- Secrets --
 
-  register_error "wagger.secrets/encryption_failed", :internal,
-    message: "Failed to encrypt data"
+  register_error("wagger.secrets/encryption_failed", :internal, message: "Failed to encrypt data")
 
-  register_error "wagger.secrets/key_generation_failed", :internal,
+  register_error("wagger.secrets/key_generation_failed", :internal,
     message: "Failed to generate or load encryption key"
+  )
 
   # -- Applications --
 
-  register_error "wagger.applications/not_found", :validation,
+  register_error("wagger.applications/not_found", :validation,
     message: "Application not found",
     status: 404
+  )
 
-  register_error "wagger.applications/not_shareable", :validation,
+  register_error("wagger.applications/not_shareable", :validation,
     message: "Application is not public and shareable",
     status: 404
+  )
 
-  register_error "wagger.applications/name_taken", :validation,
+  register_error("wagger.applications/name_taken", :validation,
     message: "Application name is already taken",
     status: 409
+  )
 
-  register_error "wagger.applications/protected", :auth,
+  register_error("wagger.applications/protected", :auth,
     message: "Cannot delete a protected application",
     status: 403
+  )
 end

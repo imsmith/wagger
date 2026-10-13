@@ -65,7 +65,9 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
     test "tool-name extension overrides auto-derived name" do
       rpc = %ExYang.Model.Rpc{
         name: "create-note",
-        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "tool-name"}, argument: "createNote"}]
+        extensions: [
+          %ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "tool-name"}, argument: "createNote"}
+        ]
       }
 
       assert {[tool], _} = Deriver.derive_tools([rpc])
@@ -76,7 +78,12 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       rpc = %ExYang.Model.Rpc{
         name: "rpc1",
         description: "engineer doc",
-        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "description-for-llm"}, argument: "llm doc"}]
+        extensions: [
+          %ExYang.Model.ExtensionUse{
+            keyword: {"wagger-mcp", "description-for-llm"},
+            argument: "llm doc"
+          }
+        ]
       }
 
       assert {[tool], _} = Deriver.derive_tools([rpc])
@@ -93,7 +100,12 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
     test "rpc with prompt-name is excluded from tools" do
       rpc = %ExYang.Model.Rpc{
         name: "summarize",
-        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "prompt-name"}, argument: "summarize"}]
+        extensions: [
+          %ExYang.Model.ExtensionUse{
+            keyword: {"wagger-mcp", "prompt-name"},
+            argument: "summarize"
+          }
+        ]
       }
 
       assert {[], _} = Deriver.derive_tools([rpc])
@@ -102,7 +114,9 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
     test "rpc with exclude is omitted" do
       rpc = %ExYang.Model.Rpc{
         name: "internal",
-        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "exclude"}, argument: nil}]
+        extensions: [
+          %ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "exclude"}, argument: nil}
+        ]
       }
 
       assert {[], _} = Deriver.derive_tools([rpc])
@@ -112,7 +126,9 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       rpc = %ExYang.Model.Rpc{
         name: "purge",
         description: "Wipe everything.",
-        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "dangerous"}, argument: nil}]
+        extensions: [
+          %ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "dangerous"}, argument: nil}
+        ]
       }
 
       assert {[tool], _} = Deriver.derive_tools([rpc])
@@ -135,7 +151,9 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       rpc = %ExYang.Model.Rpc{
         name: "rpc1",
         description: "yang doc",
-        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "description-for-llm"}, argument: ""}]
+        extensions: [
+          %ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "description-for-llm"}, argument: ""}
+        ]
       }
 
       assert {[tool], _} = Deriver.derive_tools([rpc])
@@ -146,7 +164,12 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       rpc = %ExYang.Model.Rpc{
         name: "rpc1",
         description: "yang doc",
-        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "description-for-llm"}, argument: "   "}]
+        extensions: [
+          %ExYang.Model.ExtensionUse{
+            keyword: {"wagger-mcp", "description-for-llm"},
+            argument: "   "
+          }
+        ]
       }
 
       assert {[tool], _} = Deriver.derive_tools([rpc])
@@ -167,7 +190,12 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       list = %ExYang.Model.List{
         name: "notes",
         key: "id",
-        body: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "resource-template"}, argument: "/api/notes/{id}"}]
+        body: [
+          %ExYang.Model.ExtensionUse{
+            keyword: {"wagger-mcp", "resource-template"},
+            argument: "/api/notes/{id}"
+          }
+        ]
       }
 
       assert {[res], _} = Deriver.derive_resources([list])
@@ -200,7 +228,12 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       list = %ExYang.Model.List{
         name: "files",
         key: "path",
-        body: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "mime-type"}, argument: "application/octet-stream"}]
+        body: [
+          %ExYang.Model.ExtensionUse{
+            keyword: {"wagger-mcp", "mime-type"},
+            argument: "application/octet-stream"
+          }
+        ]
       }
 
       assert {[res], _} = Deriver.derive_resources([list])
@@ -218,7 +251,12 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       list = %ExYang.Model.List{
         name: "notes",
         key: "id",
-        body: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "resource-template"}, argument: "/api/notes"}]
+        body: [
+          %ExYang.Model.ExtensionUse{
+            keyword: {"wagger-mcp", "resource-template"},
+            argument: "/api/notes"
+          }
+        ]
       }
 
       assert {[], errors} = Deriver.derive_resources([list])
@@ -231,7 +269,12 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       rpc = %ExYang.Model.Rpc{
         name: "summarize",
         description: "Summarize text.",
-        extensions: [%ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "prompt-name"}, argument: "summarize"}]
+        extensions: [
+          %ExYang.Model.ExtensionUse{
+            keyword: {"wagger-mcp", "prompt-name"},
+            argument: "summarize"
+          }
+        ]
       }
 
       assert {[prompt], _} = Deriver.derive_prompts([rpc])
@@ -247,7 +290,10 @@ defmodule Wagger.Generator.Mcp.DeriverTest do
       rpc = %ExYang.Model.Rpc{
         name: "summarize",
         extensions: [
-          %ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "prompt-name"}, argument: "summarize"},
+          %ExYang.Model.ExtensionUse{
+            keyword: {"wagger-mcp", "prompt-name"},
+            argument: "summarize"
+          },
           %ExYang.Model.ExtensionUse{keyword: {"wagger-mcp", "exclude"}, argument: nil}
         ]
       }

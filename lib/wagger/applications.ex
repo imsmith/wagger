@@ -114,9 +114,10 @@ defmodule Wagger.Applications do
   protected apps, or `{:error, %Ecto.Changeset{}}` on failure.
   """
   def delete_application(%Application{name: name}) when name in @protected_apps do
-    {:error, Comn.Errors.Registry.error!("wagger.applications/protected",
-      message: "Cannot delete protected application: #{name}"
-    )}
+    {:error,
+     Comn.Errors.Registry.error!("wagger.applications/protected",
+       message: "Cannot delete protected application: #{name}"
+     )}
   end
 
   def delete_application(%Application{} = application) do

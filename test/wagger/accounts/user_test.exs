@@ -10,11 +10,12 @@ defmodule Wagger.Accounts.UserTest do
 
   describe "changeset/2" do
     test "casts email and role" do
-      cs = User.changeset(%User{}, %{
-        "username" => "alice",
-        "email" => "alice@example.com",
-        "role" => "user"
-      })
+      cs =
+        User.changeset(%User{}, %{
+          "username" => "alice",
+          "email" => "alice@example.com",
+          "role" => "user"
+        })
 
       assert cs.valid?
       assert get_change(cs, :email) == "alice@example.com"

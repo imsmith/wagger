@@ -46,7 +46,10 @@ defmodule Wagger.Generator.McpTest do
 
     test "round-trip on annotated fixture" do
       source = File.read!(@fixture_in)
-      assert {:ok, yang_text, report} = Wagger.Generator.Mcp.generate_from_yang(source, "notes-service")
+
+      assert {:ok, yang_text, report} =
+               Wagger.Generator.Mcp.generate_from_yang(source, "notes-service")
+
       assert report.tools_count == 2
       assert report.resources_count == 2
       assert report.prompts_count == 1

@@ -31,7 +31,9 @@ defmodule Wagger.Generator.Mcp.WaggerMcpExtensionsTest do
   test "declares all eight extensions", %{source: source} do
     {:ok, parsed} = ExYang.parse(source)
     names = Enum.map(parsed.extensions, & &1.name)
-    for n <- ~w(tool-name resource-template prompt-name description-for-llm mime-type dangerous read-only exclude) do
+
+    for n <-
+          ~w(tool-name resource-template prompt-name description-for-llm mime-type dangerous read-only exclude) do
       assert n in names, "missing extension: #{n}"
     end
   end
@@ -39,9 +41,11 @@ defmodule Wagger.Generator.Mcp.WaggerMcpExtensionsTest do
   test "argument-bearing extensions declare argument", %{source: source} do
     {:ok, parsed} = ExYang.parse(source)
     by_name = Map.new(parsed.extensions, &{&1.name, &1})
+
     for n <- ~w(tool-name resource-template prompt-name description-for-llm mime-type) do
       assert by_name[n].argument != nil, "extension #{n} should have an argument"
     end
+
     for n <- ~w(dangerous read-only exclude) do
       assert by_name[n].argument == nil, "extension #{n} should not have an argument"
     end

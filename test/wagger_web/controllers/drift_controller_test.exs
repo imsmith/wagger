@@ -51,6 +51,7 @@ defmodule WaggerWeb.DriftControllerTest do
         })
 
       conn = get(conn, ~p"/api/applications/#{app.id}/drift/nginx")
+
       assert %{"provider" => "nginx", "status" => "current", "last_generated" => ts} =
                json_response(conn, 200)
 

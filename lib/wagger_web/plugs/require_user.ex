@@ -13,7 +13,8 @@ defmodule WaggerWeb.Plugs.RequireUser do
   def call(%{assigns: %{current_user: %{}}} = conn, _opts), do: conn
 
   def call(conn, _opts) do
-    return_to = conn.request_path <> if conn.query_string == "", do: "", else: "?" <> conn.query_string
+    return_to =
+      conn.request_path <> if conn.query_string == "", do: "", else: "?" <> conn.query_string
 
     conn
     |> fetch_flash([])

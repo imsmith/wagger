@@ -15,7 +15,10 @@ defmodule Wagger.Import.PreviewTest do
 
   setup do
     {:ok, app} = Applications.create_application(%{name: "test-app"})
-    {:ok, _route} = Routes.create_route(app, %{path: "/api/users", methods: ["GET"], path_type: "exact"})
+
+    {:ok, _route} =
+      Routes.create_route(app, %{path: "/api/users", methods: ["GET"], path_type: "exact"})
+
     %{app: app}
   end
 
@@ -108,7 +111,12 @@ defmodule Wagger.Import.PreviewTest do
       existing_route = Enum.find(existing_before, &(&1.path == "/api/users"))
 
       incoming = [
-        %{path: "/api/users", methods: ["POST", "PUT"], path_type: "exact", description: "changed"},
+        %{
+          path: "/api/users",
+          methods: ["POST", "PUT"],
+          path_type: "exact",
+          description: "changed"
+        },
         %{path: "/api/reports", methods: ["GET"], path_type: "exact", description: nil}
       ]
 

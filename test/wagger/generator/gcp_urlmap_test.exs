@@ -8,7 +8,12 @@ defmodule Wagger.Generator.GcpUrlMapTest do
 
   @routes [
     %{path: "/api/users", methods: ["GET", "POST"], path_type: "exact", rate_limit: 100},
-    %{path: "/api/users/{id}", methods: ["GET", "PUT", "DELETE"], path_type: "exact", rate_limit: nil},
+    %{
+      path: "/api/users/{id}",
+      methods: ["GET", "PUT", "DELETE"],
+      path_type: "exact",
+      rate_limit: nil
+    },
     %{path: "/static/", methods: ["GET"], path_type: "prefix", rate_limit: nil},
     %{path: "/health", methods: ["GET"], path_type: "exact", rate_limit: nil}
   ]
@@ -60,15 +65,21 @@ defmodule Wagger.Generator.GcpUrlMapTest do
       assert is_list(pm["route-rules"])
     end
 
-    test "route-rule count equals distinct method-sets + 1 for default-deny", %{instance: instance} do
+    test "route-rule count equals distinct method-sets + 1 for default-deny", %{
+      instance: instance
+    } do
       # @routes has 3 distinct method-sets: [DELETE,GET,PUT], [GET], [GET,POST]
-      route_rules = get_in(instance, ["gcp-urlmap-config", "path-matchers"]) |> hd() |> Map.get("route-rules")
+      route_rules =
+        get_in(instance, ["gcp-urlmap-config", "path-matchers"]) |> hd() |> Map.get("route-rules")
+
       distinct_method_sets = 3
       assert length(route_rules) == distinct_method_sets + 1
     end
 
     test "default-deny is the last route-rule with highest priority number", %{instance: instance} do
-      route_rules = get_in(instance, ["gcp-urlmap-config", "path-matchers"]) |> hd() |> Map.get("route-rules")
+      route_rules =
+        get_in(instance, ["gcp-urlmap-config", "path-matchers"]) |> hd() |> Map.get("route-rules")
+
       last = List.last(route_rules)
       max_priority = Enum.max_by(route_rules, & &1["priority"])["priority"]
       assert last["priority"] == max_priority
@@ -78,8 +89,12 @@ defmodule Wagger.Generator.GcpUrlMapTest do
       refute Map.has_key?(mr, "header-matches")
     end
 
-    test "all non-default route-rules have service __KNOWN_TRAFFIC_BACKEND__", %{instance: instance} do
-      route_rules = get_in(instance, ["gcp-urlmap-config", "path-matchers"]) |> hd() |> Map.get("route-rules")
+    test "all non-default route-rules have service __KNOWN_TRAFFIC_BACKEND__", %{
+      instance: instance
+    } do
+      route_rules =
+        get_in(instance, ["gcp-urlmap-config", "path-matchers"]) |> hd() |> Map.get("route-rules")
+
       allow_rules = Enum.filter(route_rules, &(&1["service"] != "__DENY_BACKEND__"))
       assert length(allow_rules) > 0
 
@@ -89,7 +104,9 @@ defmodule Wagger.Generator.GcpUrlMapTest do
     end
 
     test "match-rule count per route-rule matches routes in that bucket", %{instance: instance} do
-      route_rules = get_in(instance, ["gcp-urlmap-config", "path-matchers"]) |> hd() |> Map.get("route-rules")
+      route_rules =
+        get_in(instance, ["gcp-urlmap-config", "path-matchers"]) |> hd() |> Map.get("route-rules")
+
       # [DELETE,GET,PUT] bucket: 1 route (/api/users/{id})
       # [GET] bucket: 2 routes (/health, /static/)
       # [GET,POST] bucket: 1 route (/api/users)
@@ -159,7 +176,10 @@ defmodule Wagger.Generator.GcpUrlMapTest do
     end
 
     test "multi-method bucket emits regex-match alternation sorted with |" do
-      routes = [%{path: "/api/users", methods: ["GET", "POST"], path_type: "exact", rate_limit: nil}]
+      routes = [
+        %{path: "/api/users", methods: ["GET", "POST"], path_type: "exact", rate_limit: nil}
+      ]
+
       instance = GcpUrlMap.map_routes(routes, @config)
       hm = first_match_rule(instance)["header-matches"] |> hd()
       assert hm["header-name"] == ":method"
@@ -231,12 +251,14 @@ defmodule Wagger.Generator.GcpUrlMapTest do
       %{json: json, decoded: decoded}
     end
 
-    test "renames every nested kebab key to camelCase across full document shape", %{decoded: decoded} do
+    test "renames every nested kebab key to camelCase across full document shape", %{
+      decoded: decoded
+    } do
       # Top-level keys
       assert Enum.sort(Map.keys(decoded)) ==
-             ~w(defaultService description hostRules name pathMatchers)a
-             |> Enum.map(&Atom.to_string/1)
-             |> Enum.sort()
+               ~w(defaultService description hostRules name pathMatchers)a
+               |> Enum.map(&Atom.to_string/1)
+               |> Enum.sort()
 
       # hostRules structure
       hr = hd(decoded["hostRules"])
@@ -259,16 +281,18 @@ defmodule Wagger.Generator.GcpUrlMapTest do
 
       # Should have one path predicate (camelCase) and headerMatches
       assert Enum.any?(
-        Map.keys(mr),
-        &(&1 in ~w(fullPathMatch pathTemplateMatch prefixMatch regexMatch))
-      )
+               Map.keys(mr),
+               &(&1 in ~w(fullPathMatch pathTemplateMatch prefixMatch regexMatch))
+             )
+
       assert "headerMatches" in Map.keys(mr)
 
       # headerMatches structure — exact values for each method combination
       hm = hd(mr["headerMatches"])
       hm_keys = Enum.sort(Map.keys(hm))
+
       assert hm_keys == ~w(exactMatch headerName) or
-             hm_keys == ~w(headerName regexMatch)
+               hm_keys == ~w(headerName regexMatch)
 
       # Tighten: verify the exact regex value from [GET, POST] bucket (/api/users)
       mr_with_getpost_regex =
@@ -279,13 +303,15 @@ defmodule Wagger.Generator.GcpUrlMapTest do
         |> Enum.flat_map(& &1["matchRules"])
         |> Enum.find(fn m ->
           Map.get(m, "fullPathMatch") == "/api/users" and
-          Enum.any?(m["headerMatches"] || [], &Map.has_key?(&1, "regexMatch"))
+            Enum.any?(m["headerMatches"] || [], &Map.has_key?(&1, "regexMatch"))
         end)
 
       assert mr_with_getpost_regex != nil
+
       hm_getpost =
         mr_with_getpost_regex["headerMatches"]
         |> Enum.find(&Map.has_key?(&1, "regexMatch"))
+
       assert hm_getpost["regexMatch"] == "GET|POST"
 
       # Tighten: verify the exact pathTemplateMatch value
@@ -347,6 +373,7 @@ defmodule Wagger.Generator.GcpUrlMapTest do
       cfg = instance["gcp-urlmap-config"]
       assert cfg["default-service"] == "my-deny"
       assert hd(cfg["path-matchers"])["default-service"] == "my-deny"
+
       deny_rr =
         hd(cfg["path-matchers"])["route-rules"]
         |> List.last()
@@ -425,5 +452,4 @@ defmodule Wagger.Generator.GcpUrlMapTest do
     |> Map.get("route-rules")
     |> Enum.reject(&(&1["service"] == "__DENY_BACKEND__"))
   end
-
 end

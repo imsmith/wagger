@@ -39,8 +39,12 @@ defmodule Wagger.Snapshots do
       end
 
     case {key, output} do
-      {nil, _} -> attrs
-      {_, nil} -> attrs
+      {nil, _} ->
+        attrs
+
+      {_, nil} ->
+        attrs
+
       {k, plaintext} ->
         case Wagger.Secrets.lock(plaintext) do
           {:ok, locked} -> Map.put(attrs, k, locked)

@@ -31,6 +31,7 @@ defmodule WaggerWeb.AppListLive do
 
   def handle_event("toggle", %{"id" => id, "field" => "shareable"}, socket) do
     app = Applications.get_application!(id)
+
     if app.public do
       {:ok, _} = Applications.update_application(app, %{shareable: !app.shareable})
       {:noreply, assign(socket, :apps, load_apps())}

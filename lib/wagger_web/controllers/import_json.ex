@@ -29,7 +29,9 @@ defmodule WaggerWeb.ImportJSON do
     %{
       path: conflict.path,
       existing: %{methods: conflict.existing.methods},
-      incoming: %{methods: Map.get(conflict.incoming, :methods) || Map.get(conflict.incoming, "methods")}
+      incoming: %{
+        methods: Map.get(conflict.incoming, :methods) || Map.get(conflict.incoming, "methods")
+      }
     }
   end
 

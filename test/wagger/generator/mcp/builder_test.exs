@@ -35,6 +35,7 @@ defmodule Wagger.Generator.Mcp.BuilderTest do
         resources: [],
         prompts: []
       }
+
       assert {:error, {:duplicate, "tools", "search"}} = Builder.validate(caps)
     end
 
@@ -45,6 +46,7 @@ defmodule Wagger.Generator.Mcp.BuilderTest do
         resources: [%{name: "r"}],
         prompts: []
       }
+
       assert {:error, {:missing, "resources[0].uri_template"}} = Builder.validate(caps)
     end
 
@@ -55,6 +57,7 @@ defmodule Wagger.Generator.Mcp.BuilderTest do
         resources: [],
         prompts: [%{description: "x"}]
       }
+
       assert {:error, {:missing, "prompts[0].name"}} = Builder.validate(caps)
     end
 
@@ -184,6 +187,7 @@ defmodule Wagger.Generator.Mcp.BuilderTest do
     test "imports mcp with revision 2025-06-18" do
       caps = %{app_name: "my-app"}
       {:ok, module} = Builder.build_module(caps, %{})
+
       assert [%ExYang.Model.Import{module: "mcp", prefix: "mcp", revision_date: "2025-06-18"}] =
                module.imports
     end

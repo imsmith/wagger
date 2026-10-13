@@ -40,7 +40,8 @@ defmodule Wagger.Generator.Apache do
         "default-action-phase" => 1,
         "default-action-status" => 403,
         "start-rule-id" => start_id,
-        "audit-log-path" => config[:audit_log_path] || config["audit_log_path"] || @default_audit_log,
+        "audit-log-path" =>
+          config[:audit_log_path] || config["audit_log_path"] || @default_audit_log,
         "tmp-dir" => config[:tmp_dir] || config["tmp_dir"] || @default_tmp_dir,
         "data-dir" => config[:data_dir] || config["data_dir"] || @default_data_dir,
         "rules" => rules,

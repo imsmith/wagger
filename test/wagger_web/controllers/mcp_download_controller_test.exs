@@ -20,7 +20,9 @@ defmodule WaggerWeb.McpDownloadControllerTest do
     assert conn.status == 200
     assert response(conn, 200) == "module x {}"
     assert get_resp_header(conn, "content-type") |> List.first() =~ "application/yang"
-    assert get_resp_header(conn, "content-disposition") |> List.first() =~ "attachment; filename=\"x-mcp.yang\""
+
+    assert get_resp_header(conn, "content-disposition") |> List.first() =~
+             "attachment; filename=\"x-mcp.yang\""
   end
 
   test "expired token returns 410", %{conn: conn} do

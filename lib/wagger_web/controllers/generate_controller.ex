@@ -21,17 +21,17 @@ defmodule WaggerWeb.GenerateController do
 
   action_fallback WaggerWeb.FallbackController
 
-
   @doc "Generates WAF config for the given application and provider, stores a snapshot."
   def create(conn, %{"application_id" => app_id, "provider" => provider} = params) do
     config = Map.drop(params, ["application_id", "provider"])
 
     case Generator.fetch_provider(provider) do
       :error ->
-        err = Comn.Errors.Registry.error!("wagger.generator/unknown_provider",
-          message: "Unknown provider: #{provider}",
-          field: "provider"
-        )
+        err =
+          Comn.Errors.Registry.error!("wagger.generator/unknown_provider",
+            message: "Unknown provider: #{provider}",
+            field: "provider"
+          )
 
         conn
         |> put_status(:bad_request)
@@ -72,7 +72,12 @@ defmodule WaggerWeb.GenerateController do
           {:error, %Comn.Errors.ErrorStruct{} = err} ->
             conn
             |> put_status(:unprocessable_entity)
-            |> json(%{error: err.message, reason: err.reason, field: err.field, suggestion: err.suggestion})
+            |> json(%{
+              error: err.message,
+              reason: err.reason,
+              field: err.field,
+              suggestion: err.suggestion
+            })
 
           {:error, reason} ->
             conn

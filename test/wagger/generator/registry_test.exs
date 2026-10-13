@@ -17,7 +17,12 @@ defmodule Wagger.Generator.RegistryTest do
 
   test "every provider spec resolves to a loaded Generator implementation" do
     for {_name, spec} <- Generator.providers(),
-        mod <- List.wrap(spec) |> Enum.map(fn {_, m, _} -> m; m -> m end) do
+        mod <-
+          List.wrap(spec)
+          |> Enum.map(fn
+            {_, m, _} -> m
+            m -> m
+          end) do
       assert Code.ensure_loaded?(mod)
       assert function_exported?(mod, :yang_module, 0)
     end

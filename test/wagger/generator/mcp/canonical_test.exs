@@ -31,6 +31,7 @@ defmodule Wagger.Generator.Mcp.CanonicalTest do
   test "declares core groupings", %{source: source} do
     {:ok, parsed} = ExYang.parse(source)
     grouping_names = Enum.map(parsed.groupings, & &1.name)
+
     for name <- ~w(tool-definition resource-definition prompt-definition capabilities server-info) do
       assert name in grouping_names, "missing grouping: #{name}"
     end
@@ -39,7 +40,9 @@ defmodule Wagger.Generator.Mcp.CanonicalTest do
   test "declares lifecycle RPCs", %{source: source} do
     {:ok, parsed} = ExYang.parse(source)
     rpc_names = Enum.map(parsed.rpcs, & &1.name)
-    for name <- ~w(initialize ping tools-list tools-call resources-list resources-read prompts-list prompts-get) do
+
+    for name <-
+          ~w(initialize ping tools-list tools-call resources-list resources-read prompts-list prompts-get) do
       assert name in rpc_names, "missing rpc: #{name}"
     end
   end
@@ -47,6 +50,7 @@ defmodule Wagger.Generator.Mcp.CanonicalTest do
   test "declares notifications", %{source: source} do
     {:ok, parsed} = ExYang.parse(source)
     notif_names = Enum.map(parsed.notifications, & &1.name)
+
     for name <- ~w(tools-list-changed resources-updated prompts-list-changed) do
       assert name in notif_names, "missing notification: #{name}"
     end
@@ -55,6 +59,7 @@ defmodule Wagger.Generator.Mcp.CanonicalTest do
   test "declares transport identities", %{source: source} do
     {:ok, parsed} = ExYang.parse(source)
     identity_names = Enum.map(parsed.identities, & &1.name)
+
     for name <- ~w(transport stdio streamable-http sse) do
       assert name in identity_names, "missing identity: #{name}"
     end
@@ -67,6 +72,7 @@ defmodule Wagger.Generator.Mcp.CanonicalTest do
     # by building a tiny module and pulling the revision_date off the import.
     {:ok, module} = Wagger.Generator.Mcp.Builder.build_module(%{app_name: "probe"}, %{})
     [%ExYang.Model.Import{revision_date: emitted}] = module.imports
+
     assert emitted == canonical_rev.date,
            "Builder.@canonical_revision (#{emitted}) drifted from yang/mcp.yang revision (#{canonical_rev.date})"
   end

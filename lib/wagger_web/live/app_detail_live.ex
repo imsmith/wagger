@@ -75,6 +75,7 @@ defmodule WaggerWeb.AppDetailLive do
 
   def handle_event("toggle_app_field", %{"field" => "shareable"}, socket) do
     app = socket.assigns.app
+
     if app.public do
       {:ok, app} = Applications.update_application(app, %{shareable: !app.shareable})
       {:noreply, assign(socket, :app, app)}
@@ -123,6 +124,7 @@ defmodule WaggerWeb.AppDetailLive do
         nil
       else
         q = String.downcase(query)
+
         socket.assigns.routes
         |> Enum.filter(fn r ->
           String.contains?(String.downcase(r.path), q) or
@@ -130,8 +132,13 @@ defmodule WaggerWeb.AppDetailLive do
         end)
         |> Enum.flat_map(fn route ->
           Enum.map(route.methods, fn method ->
-            %{method: method, path: route.path, path_parts: format_path(route.path),
-              description: route.description, rate_limit: route.rate_limit}
+            %{
+              method: method,
+              path: route.path,
+              path_parts: format_path(route.path),
+              description: route.description,
+              rate_limit: route.rate_limit
+            }
           end)
         end)
       end
@@ -173,7 +180,12 @@ defmodule WaggerWeb.AppDetailLive do
   @impl true
   def handle_event("toggle_output", %{"provider" => provider}, socket) do
     show = socket.assigns.show_output
-    new_show = if MapSet.member?(show, provider), do: MapSet.delete(show, provider), else: MapSet.put(show, provider)
+
+    new_show =
+      if MapSet.member?(show, provider),
+        do: MapSet.delete(show, provider),
+        else: MapSet.put(show, provider)
+
     {:noreply, assign(socket, :show_output, new_show)}
   end
 
@@ -194,11 +206,15 @@ defmodule WaggerWeb.AppDetailLive do
      |> put_flash(:info, "#{String.capitalize(provider)} config deleted")}
   end
 
-
   @impl true
   def handle_event("quick_generate", %{"provider" => provider}, socket) do
     default_config = default_config_for(provider, socket.assigns.app.name)
-    handle_event("regenerate", %{"provider" => provider, "config_override" => default_config}, socket)
+
+    handle_event(
+      "regenerate",
+      %{"provider" => provider, "config_override" => default_config},
+      socket
+    )
   end
 
   @impl true
@@ -226,25 +242,27 @@ defmodule WaggerWeb.AppDetailLive do
     case result do
       {:ok, output} ->
         checksum = Drift.compute_checksum(route_data)
-        {:ok, _snap} = Snapshots.create_snapshot(%{
-          application_id: app.id,
-          provider: provider,
-          config_params: Jason.encode!(config),
-          route_snapshot: :erlang.term_to_binary(route_data) |> Base.encode64(),
-          output: output,
-          checksum: checksum
-        })
+
+        {:ok, _snap} =
+          Snapshots.create_snapshot(%{
+            application_id: app.id,
+            provider: provider,
+            config_params: Jason.encode!(config),
+            route_snapshot: :erlang.term_to_binary(route_data) |> Base.encode64(),
+            output: output,
+            checksum: checksum
+          })
 
         drifts = Map.new(@providers, fn p -> {p, Drift.detect(app, p)} end)
         snapshots = load_latest_snapshots(app)
 
         {:noreply,
-          socket
-          |> assign(:drifts, drifts)
-          |> assign(:snapshots, snapshots)
-          |> assign(:expanded_providers, MapSet.put(socket.assigns.expanded_providers, provider))
-          |> assign(:show_output, MapSet.put(socket.assigns.show_output, provider))
-          |> put_flash(:info, "#{String.capitalize(provider)} config regenerated")}
+         socket
+         |> assign(:drifts, drifts)
+         |> assign(:snapshots, snapshots)
+         |> assign(:expanded_providers, MapSet.put(socket.assigns.expanded_providers, provider))
+         |> assign(:show_output, MapSet.put(socket.assigns.show_output, provider))
+         |> put_flash(:info, "#{String.capitalize(provider)} config regenerated")}
 
       {:error, %Comn.Errors.ErrorStruct{} = err} ->
         {:noreply, put_flash(socket, :error, "Generation failed: #{err.message}")}
@@ -291,7 +309,8 @@ defmodule WaggerWeb.AppDetailLive do
       |> Map.drop([:_routes, :_count])
       |> Map.new(fn {k, v} -> {k, compute_counts(v)} end)
 
-    child_count = children |> Map.values() |> Enum.reduce(0, fn c, acc -> acc + (c[:_count] || 0) end)
+    child_count =
+      children |> Map.values() |> Enum.reduce(0, fn c, acc -> acc + (c[:_count] || 0) end)
 
     children
     |> Map.put(:_routes, leaf_routes)
@@ -334,8 +353,13 @@ defmodule WaggerWeb.AppDetailLive do
     collect_routes(node)
     |> Enum.flat_map(fn route ->
       Enum.map(route.methods, fn method ->
-        %{method: method, path: route.path, path_parts: format_path(route.path),
-          description: route.description, rate_limit: route.rate_limit}
+        %{
+          method: method,
+          path: route.path,
+          path_parts: format_path(route.path),
+          description: route.description,
+          rate_limit: route.rate_limit
+        }
       end)
     end)
     |> Enum.sort_by(& &1.path)
@@ -343,6 +367,7 @@ defmodule WaggerWeb.AppDetailLive do
 
   defp collect_routes(node) when is_map(node) do
     own = Map.get(node, :_routes, [])
+
     child_routes =
       node
       |> Map.drop([:_routes, :_count])
@@ -392,6 +417,7 @@ defmodule WaggerWeb.AppDetailLive do
   @doc "Returns a brief drift summary string for provider badges."
   def drift_summary(%Drift{status: :never_generated}), do: nil
   def drift_summary(%Drift{status: :current}), do: "current"
+
   def drift_summary(%Drift{status: :drifted, changes: changes}) do
     added = length(changes.added)
     removed = length(changes.removed)
@@ -401,9 +427,13 @@ defmodule WaggerWeb.AppDetailLive do
   defp default_config_for(provider, app_name) when provider in ~w(nginx caddy) do
     %{"prefix" => app_name, "upstream" => "http://upstream:8080"}
   end
+
   defp default_config_for("aws", app_name), do: %{"prefix" => app_name, "scope" => "REGIONAL"}
   defp default_config_for("azure", app_name), do: %{"prefix" => app_name, "mode" => "Prevention"}
-  defp default_config_for("zap", app_name), do: %{"prefix" => app_name, "target_url" => "{{TARGET_URL}}"}
+
+  defp default_config_for("zap", app_name),
+    do: %{"prefix" => app_name, "target_url" => "{{TARGET_URL}}"}
+
   defp default_config_for("gcp", app_name) do
     %{
       "prefix" => app_name,
@@ -413,6 +443,7 @@ defmodule WaggerWeb.AppDetailLive do
       "deny_backend" => ""
     }
   end
+
   defp default_config_for(_provider, app_name), do: %{"prefix" => app_name}
 
   # Parse textarea and optional text config fields for GCP before dispatch.
@@ -424,11 +455,13 @@ defmodule WaggerWeb.AppDetailLive do
     |> Map.update("deny_backend", nil, &nil_if_blank/1)
     |> Map.reject(fn {_k, v} -> is_nil(v) end)
   end
+
   defp parse_provider_config(_provider, config), do: config
 
   defp parse_textarea_field(nil), do: nil
   defp parse_textarea_field(""), do: nil
   defp parse_textarea_field(value) when is_list(value), do: value
+
   defp parse_textarea_field(value) when is_binary(value) do
     case value |> String.split("\n") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) do
       [] -> nil

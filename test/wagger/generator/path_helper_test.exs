@@ -121,6 +121,7 @@ defmodule Wagger.Generator.PathHelperTest do
         %{path: "/a", methods: ["GET"], path_type: "exact"},
         %{path: "/a", methods: ["POST"], path_type: "exact"}
       ]
+
       result = PathHelper.partition_by_method_set(routes, & &1.path)
       assert result == [{["GET", "POST"], ["/a"]}]
     end
@@ -130,6 +131,7 @@ defmodule Wagger.Generator.PathHelperTest do
         %{path: "/a", methods: ["GET", "POST"], path_type: "exact"},
         %{path: "/a", methods: ["GET"], path_type: "exact"}
       ]
+
       result = PathHelper.partition_by_method_set(routes, & &1.path)
       assert result == [{["GET", "POST"], ["/a"]}]
     end
@@ -140,13 +142,14 @@ defmodule Wagger.Generator.PathHelperTest do
         %{path: "/a", methods: ["GET"], path_type: "exact"},
         %{path: "/c", methods: ["GET", "POST"], path_type: "exact"}
       ]
+
       result = PathHelper.partition_by_method_set(routes, & &1.path)
       # Results sorted by method-set: ["GET"], ["GET", "POST"], ["POST"]
       assert result == [
-        {["GET"], ["/a"]},
-        {["GET", "POST"], ["/c"]},
-        {["POST"], ["/b"]}
-      ]
+               {["GET"], ["/a"]},
+               {["GET", "POST"], ["/c"]},
+               {["POST"], ["/b"]}
+             ]
     end
 
     test "mapper projects paths as raw strings" do
@@ -154,6 +157,7 @@ defmodule Wagger.Generator.PathHelperTest do
         %{path: "/users", methods: ["GET"], path_type: "exact"},
         %{path: "/posts", methods: ["GET"], path_type: "exact"}
       ]
+
       result = PathHelper.partition_by_method_set(routes, & &1.path)
       [{methods, paths}] = result
       assert methods == ["GET"]
@@ -165,6 +169,7 @@ defmodule Wagger.Generator.PathHelperTest do
         %{path: "/users/{id}", methods: ["GET"], path_type: "exact"},
         %{path: "/posts/{id}", methods: ["GET"], path_type: "exact"}
       ]
+
       result = PathHelper.partition_by_method_set(routes, &PathHelper.to_regex/1)
       [{methods, paths}] = result
       assert methods == ["GET"]
@@ -176,6 +181,7 @@ defmodule Wagger.Generator.PathHelperTest do
         %{path: "/users/{id}", methods: ["GET"], path_type: "exact"},
         %{path: "/posts/{id}", methods: ["GET"], path_type: "exact"}
       ]
+
       result = PathHelper.partition_by_method_set(routes, &PathHelper.to_wildcard/1)
       [{methods, paths}] = result
       assert methods == ["GET"]
@@ -189,6 +195,7 @@ defmodule Wagger.Generator.PathHelperTest do
         %{path: "/api/admin", methods: ["DELETE"], path_type: "exact"},
         %{path: "/api/health", methods: ["GET"], path_type: "exact"}
       ]
+
       result = PathHelper.partition_by_method_set(routes, & &1.path)
       # Buckets sorted by method-set: ["DELETE"], ["GET"], ["GET", "POST"]
       assert length(result) == 3
@@ -208,12 +215,13 @@ defmodule Wagger.Generator.PathHelperTest do
         %{path: "/x", methods: ["POST"], path_type: "exact"},
         %{path: "/z", methods: ["GET", "POST"], path_type: "exact"}
       ]
+
       result = PathHelper.partition_by_method_set(routes, & &1.path)
       # /x should have GET+POST, /y has GET, /z has GET+POST
       assert result == [
-        {["GET"], ["/y"]},
-        {["GET", "POST"], ["/x", "/z"]}
-      ]
+               {["GET"], ["/y"]},
+               {["GET", "POST"], ["/x", "/z"]}
+             ]
     end
   end
 end

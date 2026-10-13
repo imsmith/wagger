@@ -19,8 +19,7 @@ defmodule WaggerWeb.OauthCredentialsLive do
 
     case secret do
       :unset ->
-        {:noreply,
-         put_flash(socket, :error, "No secret has ever been set; please provide one.")}
+        {:noreply, put_flash(socket, :error, "No secret has ever been set; please provide one.")}
 
       val ->
         case OauthCredentials.upsert(provider, params["client_id"], val) do

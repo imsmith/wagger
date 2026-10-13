@@ -40,7 +40,9 @@ defmodule Wagger.Accounts.User do
   padding still matches the stored row.
   """
   def normalize_email(nil), do: nil
-  def normalize_email(email) when is_binary(email), do: email |> String.trim() |> String.downcase()
+
+  def normalize_email(email) when is_binary(email),
+    do: email |> String.trim() |> String.downcase()
 
   @doc """
   Changeset for creating or updating a User.
