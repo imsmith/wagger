@@ -35,7 +35,7 @@
       <div class="text-xs font-semibold uppercase tracking-wide text-[color:var(--tn-text-muted)]">
         Routes
       </div>
-      <form phx-change="search_routes" class="flex items-center">
+      <form id="route-search-form" phx-change="search_routes" class="flex items-center">
         <input
           name="query"
           type="text"
@@ -140,8 +140,7 @@
                 <div class="flex gap-1 flex-wrap mt-2">
                   <%= for route <- Map.get(child, :_routes, []) do %>
                     <%= for m <- route.methods do %>
-                      <span class={"inline-block w-1.5 h-1.5 rounded-full #{method_dot_color(m)}"}>
-                      </span>
+                      <span class={"inline-block w-1.5 h-1.5 rounded-full #{method_dot_color(m)}"}></span>
                     <% end %>
                   <% end %>
                 </div>
@@ -243,7 +242,7 @@
     </div>
 
     <%= if @selected_provider do %>
-      <form phx-submit="generate" class="space-y-3">
+      <form id="generate-config-form" phx-submit="generate" class="space-y-3">
         <div class="flex flex-wrap gap-3 items-end">
           <%= for field_spec <- config_fields_for(@selected_provider) do %>
             <% {field, label} = config_field_key_label(field_spec) %>

@@ -82,7 +82,7 @@
         <%= if @new_app_preview do %>
           <div class="border-t border-neutral pt-3 space-y-3">
             <%!-- App name --%>
-            <form phx-submit="create_new_app" class="space-y-3">
+            <form id="create-new-app-form" phx-submit="create_new_app" class="space-y-3">
               <div class="flex items-end gap-3">
                 <div>
                   <label class="text-xs text-[color:var(--tn-text-muted)] block mb-1">

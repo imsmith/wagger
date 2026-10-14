@@ -6,7 +6,7 @@ defmodule WaggerWeb.McpDownloadControllerTest do
 
   setup %{conn: conn}, do: %{conn: log_in_as_user(conn)}
 
-  test "anonymous request is redirected to login", %{conn: conn} do
+  test "anonymous request is redirected to login" do
     token = Phoenix.Token.sign(WaggerWeb.Endpoint, @salt, %{yang_text: "x", filename: "x.yang"})
     conn = build_conn() |> get(~p"/mcp/download/#{token}")
     assert redirected_to(conn) == "/login"

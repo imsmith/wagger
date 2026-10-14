@@ -6,7 +6,7 @@ defmodule Wagger.MixProject do
     [
       app: :wagger,
       version: "0.2.0",
-      elixir: "~> 1.15",
+      elixir: "~> 1.20",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -41,18 +41,18 @@ defmodule Wagger.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:comn, git: "https://github.com/imsmith/comn.git", tag: "v0.5.0"},
-      {:tidewave, "~> 0.5", only: :dev},
-      {:phoenix, "~> 1.8.4"},
+      {:comn, git: "https://github.com/imsmith/comn.git", tag: "v0.6.3"},
+      {:tidewave, "~> 0.9", only: :dev},
+      {:phoenix, "~> 1.8.15"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},
-      {:ecto_sqlite3, ">= 0.0.0"},
+      {:ecto_sqlite3, "~> 0.25"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
-      {:phoenix_live_view, "~> 1.1.0"},
+      {:phoenix_live_view, "~> 1.2.0"},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:esbuild, "~> 0.10", runtime: Mix.env() == :dev},
-      {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
+      {:tailwind, "~> 0.5", runtime: Mix.env() == :dev},
       {:heroicons,
        github: "tailwindlabs/heroicons",
        tag: "v2.2.0",
